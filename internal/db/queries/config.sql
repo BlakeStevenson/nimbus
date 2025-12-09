@@ -7,10 +7,11 @@ SELECT * FROM config
 ORDER BY key;
 
 -- name: SetConfig :one
-INSERT INTO config (key, value)
-VALUES ($1, $2)
+INSERT INTO config (key, value, metadata)
+VALUES ($1, $2, COALESCE($3, '{}'::jsonb))
 ON CONFLICT (key) DO UPDATE
 SET value = EXCLUDED.value,
+    metadata = COALESCE(EXCLUDED.metadata, config.metadata),
     updated_at = NOW()
 RETURNING *;
 

@@ -277,10 +277,16 @@ func (pm *PluginManager) loadPlugin(ctx context.Context, id string) error {
 		zap.String("plugin_id", id),
 		zap.String("executable", execPath))
 
-	// Start plugin process
+	// Start plugin process with SDK-enabled plugin map
+	pluginMap := map[string]plugin.Plugin{
+		"media-suite": &MediaSuitePluginGRPC{
+			SDK: pm.sdk,
+		},
+	}
+
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig: Handshake,
-		Plugins:         PluginMap,
+		Plugins:         pluginMap,
 		Cmd:             exec.Command(execPath),
 		AllowedProtocols: []plugin.Protocol{
 			plugin.ProtocolGRPC,

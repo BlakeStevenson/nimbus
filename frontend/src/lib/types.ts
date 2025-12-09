@@ -27,10 +27,18 @@ export interface MediaListResponse {
   total: number;
 }
 
+export interface ConfigMetadata {
+  title?: string;
+  description?: string;
+  type?: "text" | "number" | "boolean" | "select" | "multi";
+  values?: string[]; // For select and multi types
+}
+
 export interface ConfigValue {
   key: string;
   value: any;
-  updated_at: string;
+  updated_at?: string;
+  metadata?: ConfigMetadata;
 }
 
 // For future plugins

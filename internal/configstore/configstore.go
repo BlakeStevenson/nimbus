@@ -30,6 +30,15 @@ func (s *Store) Get(ctx context.Context, key string) (json.RawMessage, error) {
 	return cfg.Value, nil
 }
 
+// GetWithMetadata retrieves a configuration entry including its metadata
+func (s *Store) GetWithMetadata(ctx context.Context, key string) (generated.Config, error) {
+	cfg, err := s.queries.GetConfig(ctx, key)
+	if err != nil {
+		return generated.Config{}, fmt.Errorf("failed to get config %s: %w", key, err)
+	}
+	return cfg, nil
+}
+
 // Set stores a configuration value
 func (s *Store) Set(ctx context.Context, key string, value any) error {
 	jsonValue, err := json.Marshal(value)
@@ -38,8 +47,36 @@ func (s *Store) Set(ctx context.Context, key string, value any) error {
 	}
 
 	_, err = s.queries.SetConfig(ctx, generated.SetConfigParams{
-		Key:   key,
-		Value: jsonValue,
+		Key:     key,
+		Value:   jsonValue,
+		Column3: nil, // Don't update metadata when setting value
+	})
+	if err != nil {
+		return fmt.Errorf("failed to set config %s: %w", key, err)
+	}
+
+	return nil
+}
+
+// SetWithMetadata stores a configuration value along with its metadata
+func (s *Store) SetWithMetadata(ctx context.Context, key string, value any, metadata map[string]any) error {
+	jsonValue, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config value: %w", err)
+	}
+
+	var jsonMetadata []byte
+	if metadata != nil {
+		jsonMetadata, err = json.Marshal(metadata)
+		if err != nil {
+			return fmt.Errorf("failed to marshal config metadata: %w", err)
+		}
+	}
+
+	_, err = s.queries.SetConfig(ctx, generated.SetConfigParams{
+		Key:     key,
+		Value:   jsonValue,
+		Column3: jsonMetadata,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to set config %s: %w", key, err)
@@ -129,6 +166,15 @@ func (s *Store) GetAll(ctx context.Context) (map[string]json.RawMessage, error) 
 	}
 
 	return result, nil
+}
+
+// GetAllWithMetadata retrieves all configuration entries including metadata
+func (s *Store) GetAllWithMetadata(ctx context.Context) ([]generated.Config, error) {
+	configs, err := s.queries.GetAllConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all config: %w", err)
+	}
+	return configs, nil
 }
 
 // GetByPrefix retrieves all configuration values with a given prefix

@@ -1,19 +1,25 @@
-import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { useMediaList } from '@/lib/api/media';
-import { MediaTable } from '@/components/media/MediaTable';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useMediaList } from "@/lib/api/media";
+import { MediaTable } from "@/components/media/MediaTable";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
-import type { MediaFilters } from '@/lib/types';
+} from "@/components/ui/select";
+import { Loader2 } from "lucide-react";
+import type { MediaFilters } from "@/lib/types";
 
 interface MediaListPageProps {
   defaultKind?: string;
@@ -21,37 +27,75 @@ interface MediaListPageProps {
   description?: string;
 }
 
-export function MediaListPage({ defaultKind, title, description }: MediaListPageProps) {
+export function MediaListPage({
+  defaultKind,
+  title,
+  description,
+}: MediaListPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [filters, setFilters] = useState<MediaFilters>({
-    kind: defaultKind || searchParams.get('kind') || undefined,
-    q: searchParams.get('q') || undefined,
-  });
+  const [searchInput, setSearchInput] = useState(searchParams.get("q") || "");
+  const debounceTimerRef = useRef<NodeJS.Timeout>();
+
+  // Build filters from URL params and props
+  const filters: MediaFilters = {
+    kind: defaultKind || searchParams.get("kind") || undefined,
+    q: searchParams.get("q") || undefined,
+  };
 
   const { data, isLoading, error } = useMediaList(filters);
 
+  // Sync search input with URL when URL changes externally
   useEffect(() => {
-    const newParams = new URLSearchParams();
-    if (filters.kind) newParams.set('kind', filters.kind);
-    if (filters.q) newParams.set('q', filters.q);
-    setSearchParams(newParams, { replace: true });
-  }, [filters, setSearchParams]);
+    const qFromUrl = searchParams.get("q") || "";
+    if (qFromUrl !== searchInput) {
+      setSearchInput(qFromUrl);
+    }
+  }, [searchParams]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleKindChange = (value: string) => {
-    setFilters((prev) => ({ ...prev, kind: value === 'all' ? undefined : value }));
+    const newParams = new URLSearchParams(searchParams);
+    if (value === "all") {
+      newParams.delete("kind");
+    } else {
+      newParams.set("kind", value);
+    }
+    setSearchParams(newParams);
   };
 
   const handleSearchChange = (value: string) => {
-    setFilters((prev) => ({ ...prev, q: value || undefined }));
+    setSearchInput(value);
+
+    // Clear existing timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Set new timer to update URL after 500ms
+    debounceTimerRef.current = setTimeout(() => {
+      const newParams = new URLSearchParams(searchParams);
+      if (value) {
+        newParams.set("q", value);
+      } else {
+        newParams.delete("q");
+      }
+      setSearchParams(newParams);
+    }, 500);
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">{title || 'Media Library'}</h1>
-        {description && (
-          <p className="text-muted-foreground">{description}</p>
-        )}
+        <h1 className="text-3xl font-bold">{title || "Media Library"}</h1>
+        {description && <p className="text-muted-foreground">{description}</p>}
       </div>
 
       <Card>
@@ -64,7 +108,7 @@ export function MediaListPage({ defaultKind, title, description }: MediaListPage
             <div className="space-y-2">
               <Label htmlFor="kind">Media Type</Label>
               <Select
-                value={filters.kind || 'all'}
+                value={filters.kind || "all"}
                 onValueChange={handleKindChange}
                 disabled={!!defaultKind}
               >
@@ -91,7 +135,7 @@ export function MediaListPage({ defaultKind, title, description }: MediaListPage
                 id="search"
                 type="search"
                 placeholder="Search by title..."
-                value={filters.q || ''}
+                value={searchInput}
                 onChange={(e) => handleSearchChange(e.target.value)}
               />
             </div>
@@ -103,7 +147,9 @@ export function MediaListPage({ defaultKind, title, description }: MediaListPage
         <CardHeader>
           <CardTitle>Results</CardTitle>
           <CardDescription>
-            {data ? `${data.total} ${data.total === 1 ? 'item' : 'items'} found` : 'Loading...'}
+            {data
+              ? `${data.total} ${data.total === 1 ? "item" : "items"} found`
+              : "Loading..."}
           </CardDescription>
         </CardHeader>
         <CardContent>

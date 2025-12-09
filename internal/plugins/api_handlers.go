@@ -147,6 +147,12 @@ func (h *APIHandlers) makePluginAPIHandler(lp *LoadedPlugin, route RouteDescript
 		// This could be based on user roles or API key permissions
 		// pluginReq.Scopes = extractScopes(ctx)
 
+		// Log before forwarding to plugin
+		h.logger.Info("Forwarding request to plugin",
+			zap.String("plugin_id", lp.Meta.ID),
+			zap.String("path", r.URL.Path),
+			zap.String("method", r.Method))
+
 		// Forward request to plugin
 		pluginResp, err := lp.Client.HandleAPI(ctx, pluginReq)
 		if err != nil {
@@ -157,6 +163,10 @@ func (h *APIHandlers) makePluginAPIHandler(lp *LoadedPlugin, route RouteDescript
 			httputil.RespondError(w, http.StatusInternalServerError, err, "Plugin error")
 			return
 		}
+
+		h.logger.Info("Plugin returned response",
+			zap.String("plugin_id", lp.Meta.ID),
+			zap.Int("status_code", pluginResp.StatusCode))
 
 		// Write response headers
 		for k, values := range pluginResp.Headers {

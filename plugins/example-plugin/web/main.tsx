@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from "react";
 
 export default function ExamplePluginPage() {
   const [helloMessage, setHelloMessage] = useState<any>(null);
@@ -8,11 +8,11 @@ export default function ExamplePluginPage() {
   const fetchHello = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/plugins/example/hello');
+      const response = await fetch("/api/plugins/example/hello");
       const data = await response.json();
       setHelloMessage(data);
     } catch (error: any) {
-      console.error('Failed to fetch hello:', error);
+      console.error("Failed to fetch hello:", error);
       setHelloMessage({ error: error.message });
     } finally {
       setLoading(false);
@@ -22,13 +22,13 @@ export default function ExamplePluginPage() {
   const fetchStatus = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/plugins/example/status', {
-        credentials: 'include',
+      const response = await fetch("/api/plugins/example/status", {
+        credentials: "include",
       });
       const data = await response.json();
       setStatusMessage(data);
     } catch (error: any) {
-      console.error('Failed to fetch status:', error);
+      console.error("Failed to fetch status:", error);
       setStatusMessage({ error: error.message });
     } finally {
       setLoading(false);
@@ -65,7 +65,7 @@ export default function ExamplePluginPage() {
             onClick={fetchHello}
             disabled={loading}
           >
-            {loading ? 'Loading...' : 'Call /api/plugins/example/hello'}
+            {loading ? "Loading..." : "Call /api/plugins/example/hello"}
           </button>
           {helloMessage && (
             <pre className="mt-2 p-3 bg-muted rounded text-xs overflow-auto">
@@ -82,7 +82,7 @@ export default function ExamplePluginPage() {
             onClick={fetchStatus}
             disabled={loading}
           >
-            {loading ? 'Loading...' : 'Call /api/plugins/example/status'}
+            {loading ? "Loading..." : "Call /api/plugins/example/status"}
           </button>
           {statusMessage && (
             <pre className="mt-2 p-3 bg-muted rounded text-xs overflow-auto">

@@ -13,6 +13,14 @@ service PluginService {
   rpc HandleEvent(HandleEventRequest) returns (HandleEventResponse);
 }
 
+// SDKService defines the gRPC service for SDK calls from plugin to host
+service SDKService {
+  rpc ConfigGet(ConfigGetRequest) returns (ConfigGetResponse);
+  rpc ConfigGetString(ConfigGetStringRequest) returns (ConfigGetStringResponse);
+  rpc ConfigSet(ConfigSetRequest) returns (ConfigSetResponse);
+  rpc ConfigDelete(ConfigDeleteRequest) returns (ConfigDeleteResponse);
+}
+
 // Empty request messages
 message MetadataRequest {}
 message APIRoutesRequest {}
@@ -48,6 +56,7 @@ message HandleAPIRequest {
   bytes body = 5;
   optional int64 user_id = 6;
   repeated string scopes = 7;
+  uint32 sdk_server_id = 8;
 }
 
 message StringList {
@@ -88,4 +97,40 @@ message HandleEventRequest {
 message HandleEventResponse {
   bool success = 1;
   string error = 2;
+}
+
+// SDK Config methods
+message ConfigGetRequest {
+  string key = 1;
+}
+
+message ConfigGetResponse {
+  bytes value = 1; // JSON-encoded value
+  string error = 2;
+}
+
+message ConfigGetStringRequest {
+  string key = 1;
+}
+
+message ConfigGetStringResponse {
+  string value = 1;
+  string error = 2;
+}
+
+message ConfigSetRequest {
+  string key = 1;
+  bytes value = 2; // JSON-encoded value
+}
+
+message ConfigSetResponse {
+  string error = 1;
+}
+
+message ConfigDeleteRequest {
+  string key = 1;
+}
+
+message ConfigDeleteResponse {
+  string error = 1;
 }

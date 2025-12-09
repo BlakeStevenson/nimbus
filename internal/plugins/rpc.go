@@ -27,23 +27,29 @@ var PluginMap = map[string]plugin.Plugin{
 type MediaSuitePluginGRPC struct {
 	plugin.Plugin
 	Impl MediaSuitePlugin
+	SDK  *SDK // SDK instance to expose to plugins (host-side only)
 }
 
 // GRPCServer registers the gRPC server for this plugin
 func (p *MediaSuitePluginGRPC) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
-	proto.RegisterPluginServiceServer(s, &GRPCServer{Impl: p.Impl})
+	proto.RegisterPluginServiceServer(s, &GRPCServer{Impl: p.Impl, Broker: broker})
 	return nil
 }
 
 // GRPCClient creates a gRPC client for this plugin
 func (p *MediaSuitePluginGRPC) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
-	return &GRPCClient{client: proto.NewPluginServiceClient(c)}, nil
+	return &GRPCClient{
+		client: proto.NewPluginServiceClient(c),
+		broker: broker,
+		sdk:    p.SDK,
+	}, nil
 }
 
 // GRPCServer is the gRPC server implementation that calls into the plugin
 type GRPCServer struct {
 	proto.UnimplementedPluginServiceServer
-	Impl MediaSuitePlugin
+	Impl   MediaSuitePlugin
+	Broker *plugin.GRPCBroker
 }
 
 // Metadata implements the Metadata RPC
@@ -82,7 +88,7 @@ func (s *GRPCServer) APIRoutes(ctx context.Context, req *proto.APIRoutesRequest)
 	return &proto.APIRoutesResponse{Routes: protoRoutes}, nil
 }
 
-// HandleAPI implements the HandleAPI RPC
+// HandleAPI implements the HandleAPI RPC (runs in plugin process)
 func (s *GRPCServer) HandleAPI(ctx context.Context, req *proto.HandleAPIRequest) (*proto.HandleAPIResponse, error) {
 	// Convert proto request to plugin request
 	pluginReq := &PluginHTTPRequest{
@@ -108,6 +114,17 @@ func (s *GRPCServer) HandleAPI(ctx context.Context, req *proto.HandleAPIRequest)
 	if req.UserId != nil {
 		uid := *req.UserId
 		pluginReq.UserID = &uid
+	}
+
+	// Connect to SDK server if host provided one
+	if req.SdkServerId != 0 && s.Broker != nil {
+		conn, err := s.Broker.Dial(req.SdkServerId)
+		if err == nil {
+			pluginReq.SDK = &GRPCSDKClient{
+				client: proto.NewSDKServiceClient(conn),
+			}
+		}
+		// If SDK connection fails, continue without SDK (plugin can handle missing SDK)
 	}
 
 	// Call plugin implementation
@@ -193,6 +210,8 @@ func (s *GRPCServer) HandleEvent(ctx context.Context, req *proto.HandleEventRequ
 // GRPCClient is the gRPC client implementation that forwards calls to the plugin
 type GRPCClient struct {
 	client proto.PluginServiceClient
+	broker *plugin.GRPCBroker
+	sdk    *SDK // SDK to expose to plugin (host-side only)
 }
 
 // Metadata calls the plugin's Metadata method
@@ -231,7 +250,7 @@ func (c *GRPCClient) APIRoutes(ctx context.Context) ([]RouteDescriptor, error) {
 	return routes, nil
 }
 
-// HandleAPI calls the plugin's HandleAPI method
+// HandleAPI calls the plugin's HandleAPI method (runs in host process)
 func (c *GRPCClient) HandleAPI(ctx context.Context, req *PluginHTTPRequest) (*PluginHTTPResponse, error) {
 	// Convert to proto request
 	protoQuery := make(map[string]*proto.StringList)
@@ -255,6 +274,20 @@ func (c *GRPCClient) HandleAPI(ctx context.Context, req *PluginHTTPRequest) (*Pl
 
 	if req.UserID != nil {
 		protoReq.UserId = req.UserID
+	}
+
+	// Start SDK server on host side if SDK is available
+	if c.sdk != nil && c.broker != nil {
+		sdkServerID := c.broker.NextId()
+		// Start SDK server in background - it will accept connections from plugin
+		go c.broker.AcceptAndServe(sdkServerID, func(opts []grpc.ServerOption) *grpc.Server {
+			server := grpc.NewServer(opts...)
+			proto.RegisterSDKServiceServer(server, &GRPCSDKServer{SDK: c.sdk})
+			return server
+		})
+		// Give the server a moment to start accepting
+		time.Sleep(50 * time.Millisecond)
+		protoReq.SdkServerId = sdkServerID
 	}
 
 	// Call plugin
@@ -326,6 +359,139 @@ func (c *GRPCClient) HandleEvent(ctx context.Context, evt Event) error {
 
 	if !resp.Success && resp.Error != "" {
 		return fmt.Errorf("plugin error: %s", resp.Error)
+	}
+
+	return nil
+}
+
+// ============================================================================
+// SDK gRPC Server (host-side)
+// ============================================================================
+
+// GRPCSDKServer is the gRPC server that exposes SDK methods to plugins
+type GRPCSDKServer struct {
+	proto.UnimplementedSDKServiceServer
+	SDK *SDK
+}
+
+// ConfigGet implements the ConfigGet RPC
+func (s *GRPCSDKServer) ConfigGet(ctx context.Context, req *proto.ConfigGetRequest) (*proto.ConfigGetResponse, error) {
+	value, err := s.SDK.ConfigGet(ctx, req.Key)
+	if err != nil {
+		return &proto.ConfigGetResponse{Error: err.Error()}, nil
+	}
+
+	jsonValue, err := json.Marshal(value)
+	if err != nil {
+		return &proto.ConfigGetResponse{Error: err.Error()}, nil
+	}
+
+	return &proto.ConfigGetResponse{Value: jsonValue}, nil
+}
+
+// ConfigGetString implements the ConfigGetString RPC
+func (s *GRPCSDKServer) ConfigGetString(ctx context.Context, req *proto.ConfigGetStringRequest) (*proto.ConfigGetStringResponse, error) {
+	value, err := s.SDK.ConfigGetString(ctx, req.Key)
+	if err != nil {
+		return &proto.ConfigGetStringResponse{Error: err.Error()}, nil
+	}
+
+	return &proto.ConfigGetStringResponse{Value: value}, nil
+}
+
+// ConfigSet implements the ConfigSet RPC
+func (s *GRPCSDKServer) ConfigSet(ctx context.Context, req *proto.ConfigSetRequest) (*proto.ConfigSetResponse, error) {
+	var value interface{}
+	if err := json.Unmarshal(req.Value, &value); err != nil {
+		return &proto.ConfigSetResponse{Error: err.Error()}, nil
+	}
+
+	if err := s.SDK.ConfigSet(ctx, req.Key, value); err != nil {
+		return &proto.ConfigSetResponse{Error: err.Error()}, nil
+	}
+
+	return &proto.ConfigSetResponse{}, nil
+}
+
+// ConfigDelete implements the ConfigDelete RPC
+func (s *GRPCSDKServer) ConfigDelete(ctx context.Context, req *proto.ConfigDeleteRequest) (*proto.ConfigDeleteResponse, error) {
+	if err := s.SDK.ConfigDelete(ctx, req.Key); err != nil {
+		return &proto.ConfigDeleteResponse{Error: err.Error()}, nil
+	}
+
+	return &proto.ConfigDeleteResponse{}, nil
+}
+
+// ============================================================================
+// SDK gRPC Client (plugin-side)
+// ============================================================================
+
+// GRPCSDKClient is the gRPC client wrapper for SDK calls
+type GRPCSDKClient struct {
+	client proto.SDKServiceClient
+}
+
+// ConfigGet calls the ConfigGet RPC
+func (c *GRPCSDKClient) ConfigGet(ctx context.Context, key string) (interface{}, error) {
+	resp, err := c.client.ConfigGet(ctx, &proto.ConfigGetRequest{Key: key})
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Error != "" {
+		return nil, fmt.Errorf(resp.Error)
+	}
+
+	var value interface{}
+	if err := json.Unmarshal(resp.Value, &value); err != nil {
+		return nil, err
+	}
+
+	return value, nil
+}
+
+// ConfigGetString calls the ConfigGetString RPC
+func (c *GRPCSDKClient) ConfigGetString(ctx context.Context, key string) (string, error) {
+	resp, err := c.client.ConfigGetString(ctx, &proto.ConfigGetStringRequest{Key: key})
+	if err != nil {
+		return "", err
+	}
+
+	if resp.Error != "" {
+		return "", fmt.Errorf(resp.Error)
+	}
+
+	return resp.Value, nil
+}
+
+// ConfigSet calls the ConfigSet RPC
+func (c *GRPCSDKClient) ConfigSet(ctx context.Context, key string, value interface{}) error {
+	jsonValue, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.client.ConfigSet(ctx, &proto.ConfigSetRequest{Key: key, Value: jsonValue})
+	if err != nil {
+		return err
+	}
+
+	if resp.Error != "" {
+		return fmt.Errorf(resp.Error)
+	}
+
+	return nil
+}
+
+// ConfigDelete calls the ConfigDelete RPC
+func (c *GRPCSDKClient) ConfigDelete(ctx context.Context, key string) error {
+	resp, err := c.client.ConfigDelete(ctx, &proto.ConfigDeleteRequest{Key: key})
+	if err != nil {
+		return err
+	}
+
+	if resp.Error != "" {
+		return fmt.Errorf(resp.Error)
 	}
 
 	return nil

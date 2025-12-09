@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.0
 // - protoc             v6.33.1
-// source: internal/plugins/proto/plugin.proto
+// source: plugin.proto
 
 package proto
 
@@ -273,5 +273,225 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "internal/plugins/proto/plugin.proto",
+	Metadata: "plugin.proto",
+}
+
+const (
+	SDKService_ConfigGet_FullMethodName       = "/proto.SDKService/ConfigGet"
+	SDKService_ConfigGetString_FullMethodName = "/proto.SDKService/ConfigGetString"
+	SDKService_ConfigSet_FullMethodName       = "/proto.SDKService/ConfigSet"
+	SDKService_ConfigDelete_FullMethodName    = "/proto.SDKService/ConfigDelete"
+)
+
+// SDKServiceClient is the client API for SDKService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// SDKService defines the gRPC service for SDK calls from plugin to host
+type SDKServiceClient interface {
+	ConfigGet(ctx context.Context, in *ConfigGetRequest, opts ...grpc.CallOption) (*ConfigGetResponse, error)
+	ConfigGetString(ctx context.Context, in *ConfigGetStringRequest, opts ...grpc.CallOption) (*ConfigGetStringResponse, error)
+	ConfigSet(ctx context.Context, in *ConfigSetRequest, opts ...grpc.CallOption) (*ConfigSetResponse, error)
+	ConfigDelete(ctx context.Context, in *ConfigDeleteRequest, opts ...grpc.CallOption) (*ConfigDeleteResponse, error)
+}
+
+type sDKServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewSDKServiceClient(cc grpc.ClientConnInterface) SDKServiceClient {
+	return &sDKServiceClient{cc}
+}
+
+func (c *sDKServiceClient) ConfigGet(ctx context.Context, in *ConfigGetRequest, opts ...grpc.CallOption) (*ConfigGetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfigGetResponse)
+	err := c.cc.Invoke(ctx, SDKService_ConfigGet_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sDKServiceClient) ConfigGetString(ctx context.Context, in *ConfigGetStringRequest, opts ...grpc.CallOption) (*ConfigGetStringResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfigGetStringResponse)
+	err := c.cc.Invoke(ctx, SDKService_ConfigGetString_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sDKServiceClient) ConfigSet(ctx context.Context, in *ConfigSetRequest, opts ...grpc.CallOption) (*ConfigSetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfigSetResponse)
+	err := c.cc.Invoke(ctx, SDKService_ConfigSet_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sDKServiceClient) ConfigDelete(ctx context.Context, in *ConfigDeleteRequest, opts ...grpc.CallOption) (*ConfigDeleteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfigDeleteResponse)
+	err := c.cc.Invoke(ctx, SDKService_ConfigDelete_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SDKServiceServer is the server API for SDKService service.
+// All implementations must embed UnimplementedSDKServiceServer
+// for forward compatibility.
+//
+// SDKService defines the gRPC service for SDK calls from plugin to host
+type SDKServiceServer interface {
+	ConfigGet(context.Context, *ConfigGetRequest) (*ConfigGetResponse, error)
+	ConfigGetString(context.Context, *ConfigGetStringRequest) (*ConfigGetStringResponse, error)
+	ConfigSet(context.Context, *ConfigSetRequest) (*ConfigSetResponse, error)
+	ConfigDelete(context.Context, *ConfigDeleteRequest) (*ConfigDeleteResponse, error)
+	mustEmbedUnimplementedSDKServiceServer()
+}
+
+// UnimplementedSDKServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedSDKServiceServer struct{}
+
+func (UnimplementedSDKServiceServer) ConfigGet(context.Context, *ConfigGetRequest) (*ConfigGetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfigGet not implemented")
+}
+func (UnimplementedSDKServiceServer) ConfigGetString(context.Context, *ConfigGetStringRequest) (*ConfigGetStringResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfigGetString not implemented")
+}
+func (UnimplementedSDKServiceServer) ConfigSet(context.Context, *ConfigSetRequest) (*ConfigSetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfigSet not implemented")
+}
+func (UnimplementedSDKServiceServer) ConfigDelete(context.Context, *ConfigDeleteRequest) (*ConfigDeleteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfigDelete not implemented")
+}
+func (UnimplementedSDKServiceServer) mustEmbedUnimplementedSDKServiceServer() {}
+func (UnimplementedSDKServiceServer) testEmbeddedByValue()                    {}
+
+// UnsafeSDKServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SDKServiceServer will
+// result in compilation errors.
+type UnsafeSDKServiceServer interface {
+	mustEmbedUnimplementedSDKServiceServer()
+}
+
+func RegisterSDKServiceServer(s grpc.ServiceRegistrar, srv SDKServiceServer) {
+	// If the following call panics, it indicates UnimplementedSDKServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&SDKService_ServiceDesc, srv)
+}
+
+func _SDKService_ConfigGet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfigGetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SDKServiceServer).ConfigGet(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SDKService_ConfigGet_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SDKServiceServer).ConfigGet(ctx, req.(*ConfigGetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SDKService_ConfigGetString_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfigGetStringRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SDKServiceServer).ConfigGetString(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SDKService_ConfigGetString_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SDKServiceServer).ConfigGetString(ctx, req.(*ConfigGetStringRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SDKService_ConfigSet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfigSetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SDKServiceServer).ConfigSet(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SDKService_ConfigSet_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SDKServiceServer).ConfigSet(ctx, req.(*ConfigSetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SDKService_ConfigDelete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfigDeleteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SDKServiceServer).ConfigDelete(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SDKService_ConfigDelete_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SDKServiceServer).ConfigDelete(ctx, req.(*ConfigDeleteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// SDKService_ServiceDesc is the grpc.ServiceDesc for SDKService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var SDKService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "proto.SDKService",
+	HandlerType: (*SDKServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ConfigGet",
+			Handler:    _SDKService_ConfigGet_Handler,
+		},
+		{
+			MethodName: "ConfigGetString",
+			Handler:    _SDKService_ConfigGetString_Handler,
+		},
+		{
+			MethodName: "ConfigSet",
+			Handler:    _SDKService_ConfigSet_Handler,
+		},
+		{
+			MethodName: "ConfigDelete",
+			Handler:    _SDKService_ConfigDelete_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "plugin.proto",
 }

@@ -2,7 +2,11 @@ package plugins
 
 import (
 	"context"
+	"fmt"
 	"time"
+
+	"github.com/blakestevenson/nimbus/internal/plugins/proto"
+	"github.com/hashicorp/go-plugin"
 )
 
 // PluginMetadata contains basic information about a plugin
@@ -33,6 +37,10 @@ type PluginHTTPRequest struct {
 	// Auth context (populated by middleware)
 	UserID *int64   `json:"user_id,omitempty"`
 	Scopes []string `json:"scopes,omitempty"`
+
+	// SDK access (for plugin-side SDK calls)
+	SDKServerID uint32       `json:"sdk_server_id,omitempty"`
+	SDK         SDKInterface `json:"-"` // SDK client for plugins to use
 }
 
 // PluginHTTPResponse represents an HTTP response from a plugin
@@ -109,4 +117,34 @@ type MediaItem struct {
 type ConfigValue struct {
 	Key   string      `json:"key"`
 	Value interface{} `json:"value"`
+}
+
+// GetSDKClient creates an SDK client from a PluginHTTPRequest
+// This should be called from within a plugin's HandleAPI method
+func GetSDKClient(req *PluginHTTPRequest, broker interface{}) (*GRPCSDKClient, error) {
+	if req.SDKServerID == 0 {
+		return nil, fmt.Errorf("no SDK server available")
+	}
+
+	grpcBroker, ok := broker.(*plugin.GRPCBroker)
+	if !ok {
+		return nil, fmt.Errorf("invalid broker type")
+	}
+
+	conn, err := grpcBroker.Dial(req.SDKServerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial SDK server: %w", err)
+	}
+
+	return &GRPCSDKClient{
+		client: proto.NewSDKServiceClient(conn),
+	}, nil
+}
+
+// SDKInterface defines the methods plugins can call on the SDK
+type SDKInterface interface {
+	ConfigGet(ctx context.Context, key string) (interface{}, error)
+	ConfigGetString(ctx context.Context, key string) (string, error)
+	ConfigSet(ctx context.Context, key string, value interface{}) error
+	ConfigDelete(ctx context.Context, key string) error
 }

@@ -1,0 +1,8 @@
+{
+  "id": "tmdb-plugin",
+  "name": "The Movie Database (TMDB)",
+  "description": "Fetches movie and TV show metadata from TMDB including descriptions, ratings, and cover images",
+  "version": "0.1.0",
+  "executable": "tmdb-plugin",
+  "capabilities": ["api"]
+}
