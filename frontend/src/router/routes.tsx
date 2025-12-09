@@ -9,6 +9,7 @@ import { PluginsPage } from "@/pages/PluginsPage";
 import { UsersPage } from "@/pages/UsersPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
+import LibraryPage from "@/pages/LibraryPage";
 
 export const router = createBrowserRouter([
   {
@@ -83,6 +84,10 @@ export const router = createBrowserRouter([
       {
         path: "media/:id",
         element: <MediaDetailPage />,
+      },
+      {
+        path: "library",
+        element: <LibraryPage />,
       },
       {
         path: "config",

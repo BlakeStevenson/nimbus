@@ -5,8 +5,10 @@ import (
 
 	"github.com/blakestevenson/nimbus/internal/auth"
 	"github.com/blakestevenson/nimbus/internal/configstore"
+	"github.com/blakestevenson/nimbus/internal/db/generated"
 	"github.com/blakestevenson/nimbus/internal/http/handlers"
 	"github.com/blakestevenson/nimbus/internal/httputil"
+	"github.com/blakestevenson/nimbus/internal/library"
 	"github.com/blakestevenson/nimbus/internal/media"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -18,6 +20,8 @@ func NewRouter(
 	mediaService media.Service,
 	authService auth.Service,
 	configStore *configstore.Store,
+	queries *generated.Queries,
+	libraryRootPath string,
 	logger *zap.Logger,
 ) http.Handler {
 	r := chi.NewRouter()
@@ -34,6 +38,7 @@ func NewRouter(
 	mediaHandler := handlers.NewMediaHandler(mediaService, logger)
 	authHandler := handlers.NewAuthHandler(authService, logger)
 	configHandler := handlers.NewConfigHandler(configStore, logger)
+	libraryHandler := library.NewHandler(queries, logger, libraryRootPath)
 
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -92,6 +97,25 @@ func NewRouter(
 				r.Get("/{key}", configHandler.GetConfig)
 				r.Put("/{key}", configHandler.SetConfig)
 				r.Delete("/{key}", configHandler.DeleteConfig)
+			})
+		})
+
+		// Protected library routes (require authentication)
+		r.Group(func(r chi.Router) {
+			r.Use(AuthMiddleware(authService, logger))
+
+			r.Route("/library", func(r chi.Router) {
+				// Status endpoint - available to all authenticated users
+				r.Get("/scan/status", libraryHandler.GetScanStatus)
+
+				// Admin-only endpoints
+				r.Group(func(r chi.Router) {
+					r.Use(RequireAdminMiddleware(logger))
+
+					r.Post("/scan", libraryHandler.StartScan)
+					r.Post("/scan/stop", libraryHandler.StopScan)
+					r.Post("/scan/reset", libraryHandler.ResetScanner)
+				})
 			})
 		})
 	})

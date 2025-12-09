@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -72,8 +73,18 @@ func main() {
 	// Initialize auth service
 	authService := auth.NewService(queries, jwtManager, passwordProvider, logger)
 
+	// Get library root path from config
+	libraryRootPath := "/media" // Default path
+	if rootPath, err := configStore.Get(context.Background(), "library.root_path"); err == nil {
+		// rootPath is a JSON string, so we need to unmarshal it
+		var path string
+		if err := json.Unmarshal(rootPath, &path); err == nil {
+			libraryRootPath = path
+		}
+	}
+
 	// Initialize HTTP router
-	router := httpserver.NewRouter(mediaService, authService, configStore, logger)
+	router := httpserver.NewRouter(mediaService, authService, configStore, queries, libraryRootPath, logger)
 
 	// Create HTTP server
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)

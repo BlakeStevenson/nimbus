@@ -9,6 +9,7 @@ import {
   Puzzle,
   Library,
   Users,
+  Scan,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -29,6 +30,7 @@ const coreNavItems: NavItem[] = [
   { label: "TV Shows", path: "/media/tv", icon: Tv, group: "Media" },
   { label: "Music", path: "/media/music", icon: Music, group: "Media" },
   { label: "Books", path: "/media/books", icon: BookOpen, group: "Media" },
+  { label: "Library Scanner", path: "/library", icon: Scan },
   { label: "Configuration", path: "/config", icon: Settings },
   { label: "Plugins", path: "/plugins", icon: Puzzle },
 ];

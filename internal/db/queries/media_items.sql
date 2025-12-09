@@ -72,3 +72,40 @@ ORDER BY sort_title, created_at DESC;
 -- name: GetMediaItemsByExternalID :many
 SELECT * FROM media_items
 WHERE external_ids @> sqlc.arg('external_id')::jsonb;
+
+-- =============================================================================
+-- Scanner-specific queries
+-- =============================================================================
+
+-- name: GetMediaItemByTitleAndYear :one
+SELECT * FROM media_items
+WHERE title = $1 AND year = $2 AND kind = $3
+LIMIT 1;
+
+-- name: GetMediaItemByTitleYearAndParent :one
+SELECT * FROM media_items
+WHERE title = $1
+  AND (year = $2 OR (year IS NULL AND $2::int IS NULL))
+  AND kind = $3
+  AND (parent_id = $4 OR (parent_id IS NULL AND $4::bigint IS NULL))
+LIMIT 1;
+
+-- name: UpsertMediaItem :one
+INSERT INTO media_items (
+    kind,
+    title,
+    sort_title,
+    year,
+    external_ids,
+    metadata,
+    parent_id
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7
+)
+ON CONFLICT (kind, title, COALESCE(year, -1), COALESCE(parent_id, -1))
+DO UPDATE SET
+    sort_title = EXCLUDED.sort_title,
+    external_ids = media_items.external_ids || EXCLUDED.external_ids,
+    metadata = media_items.metadata || EXCLUDED.metadata,
+    updated_at = NOW()
+RETURNING *;
