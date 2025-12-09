@@ -1,50 +1,128 @@
-import { useQuery } from '@tanstack/react-query';
-import type { Plugin, PluginUiManifest } from '../types';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiGet, apiPost } from "../api-client";
 
-// Placeholder hook for future plugin API implementation
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface PluginMeta {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  enabled: boolean;
+  capabilities: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PluginUINavItem {
+  label: string;
+  path: string;
+  group?: string;
+  icon?: string;
+}
+
+export interface PluginUIRoute {
+  path: string;
+  bundleUrl: string;
+}
+
+export interface PluginUIManifest {
+  id: string;
+  displayName: string;
+  navItems: PluginUINavItem[];
+  routes: PluginUIRoute[];
+}
+
+// ============================================================================
+// API Functions
+// ============================================================================
+
+export async function getPlugins(): Promise<PluginMeta[]> {
+  return apiGet<PluginMeta[]>("/api/plugins");
+}
+
+export async function getPluginUIManifest(
+  id: string,
+): Promise<PluginUIManifest> {
+  return apiGet<PluginUIManifest>(`/api/plugins/${id}/ui-manifest`);
+}
+
+export async function enablePlugin(
+  id: string,
+): Promise<{ message: string; id: string }> {
+  return apiPost(`/api/plugins/${id}/enable`, {});
+}
+
+export async function disablePlugin(
+  id: string,
+): Promise<{ message: string; id: string }> {
+  return apiPost(`/api/plugins/${id}/disable`, {});
+}
+
+// ============================================================================
+// React Query Hooks
+// ============================================================================
+
 export function usePlugins() {
-  return useQuery<Plugin[]>({
-    queryKey: ['plugins'],
-    queryFn: async () => {
-      // TODO: Replace with actual API call when backend is ready
-      // return apiGet<Plugin[]>('/api/plugins');
-
-      // Mock data for now
-      return [
-        {
-          id: 'example-plugin',
-          name: 'Example Plugin',
-          version: '1.0.0',
-          enabled: true,
-          capabilities: ['metadata', 'import'],
-          description: 'An example plugin for demonstration',
-        },
-      ];
-    },
-    enabled: false, // Disable until backend is ready
+  return useQuery({
+    queryKey: ["plugins"],
+    queryFn: getPlugins,
   });
 }
 
-// Placeholder hook for fetching plugin UI manifests
-export function usePluginUiManifests() {
-  return useQuery<PluginUiManifest[]>({
-    queryKey: ['plugin-ui-manifests'],
+export function usePluginUIManifests() {
+  const { data: plugins } = usePlugins();
+
+  return useQuery({
+    queryKey: ["plugin-ui-manifests", plugins?.map((p) => p.id).join(",")],
     queryFn: async () => {
-      // TODO: Fetch from /api/plugins and then /api/plugins/:id/ui-manifest for each
-      return [];
+      if (!plugins) return [];
+
+      const enabledPlugins = plugins.filter((p) => p.enabled);
+      const manifests = await Promise.all(
+        enabledPlugins.map((p) => getPluginUIManifest(p.id).catch(() => null)),
+      );
+
+      return manifests.filter((m): m is PluginUIManifest => m !== null);
     },
-    enabled: false, // Disable until backend is ready
+    enabled: !!plugins && plugins.length > 0,
   });
 }
 
-// Helper hook to get navigation items from plugins
-export function usePluginNavItems() {
-  const { data: manifests = [] } = usePluginUiManifests();
+export function useEnablePlugin() {
+  const queryClient = useQueryClient();
 
-  return manifests.flatMap(manifest =>
-    manifest.navItems.map(item => ({
-      ...item,
-      pluginId: manifest.id,
-    }))
-  );
+  return useMutation({
+    mutationFn: enablePlugin,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["plugins"] });
+      queryClient.invalidateQueries({ queryKey: ["plugin-ui-manifests"] });
+    },
+  });
+}
+
+export function useDisablePlugin() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: disablePlugin,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["plugins"] });
+      queryClient.invalidateQueries({ queryKey: ["plugin-ui-manifests"] });
+    },
+  });
+}
+
+/**
+ * Hook to get all plugin navigation items for the sidebar
+ */
+export function usePluginNavItems(): PluginUINavItem[] {
+  const { data: manifests } = usePluginUIManifests();
+
+  if (!manifests) return [];
+
+  // Flatten all nav items from all manifests
+  return manifests.flatMap((manifest) => manifest.navItems);
 }

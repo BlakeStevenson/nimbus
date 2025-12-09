@@ -1,0 +1,9 @@
+{
+  "id": "example-plugin",
+  "name": "Example Plugin",
+  "description": "A simple example plugin demonstrating the Nimbus plugin system capabilities",
+  "version": "0.1.0",
+  "executable": "example-plugin",
+  "webDir": "web",
+  "capabilities": ["api", "ui"]
+}

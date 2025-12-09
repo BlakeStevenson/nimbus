@@ -10,6 +10,7 @@ import { UsersPage } from "@/pages/UsersPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
 import LibraryPage from "@/pages/LibraryPage";
+import { DynamicPluginRoute } from "@/components/plugins/DynamicPluginRoute";
 
 export const router = createBrowserRouter([
   {
@@ -104,6 +105,11 @@ export const router = createBrowserRouter([
             <UsersPage />
           </ProtectedRoute>
         ),
+      },
+      // Dynamic plugin routes - catch-all for plugin-provided pages
+      {
+        path: "plugins/:pluginId/*",
+        element: <DynamicPluginRoute />,
       },
     ],
   },

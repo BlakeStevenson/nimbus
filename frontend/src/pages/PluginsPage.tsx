@@ -1,10 +1,41 @@
-import { usePlugins } from '@/lib/api/plugins';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, Puzzle } from 'lucide-react';
+import {
+  usePlugins,
+  useEnablePlugin,
+  useDisablePlugin,
+} from "@/lib/api/plugins";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Loader2, Puzzle, Power, PowerOff, AlertCircle } from "lucide-react";
+import { useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export function PluginsPage() {
   const { data: plugins, isLoading, error } = usePlugins();
+  const enablePlugin = useEnablePlugin();
+  const disablePlugin = useDisablePlugin();
+  const [actioningPlugin, setActioningPlugin] = useState<string | null>(null);
+
+  const handleToggle = async (pluginId: string, currentlyEnabled: boolean) => {
+    setActioningPlugin(pluginId);
+    try {
+      if (currentlyEnabled) {
+        await disablePlugin.mutateAsync(pluginId);
+      } else {
+        await enablePlugin.mutateAsync(pluginId);
+      }
+    } catch (err) {
+      console.error("Failed to toggle plugin:", err);
+    } finally {
+      setActioningPlugin(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -16,13 +47,13 @@ export function PluginsPage() {
       </div>
 
       {error && (
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-destructive">
-              Failed to load plugins
-            </p>
-          </CardContent>
-        </Card>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>
+            Failed to load plugins. Please try again later.
+          </AlertDescription>
+        </Alert>
       )}
 
       {isLoading && (
@@ -39,47 +70,85 @@ export function PluginsPage() {
               <CardTitle>No Plugins Installed</CardTitle>
             </div>
             <CardDescription>
-              Plugin support is coming soon. This page will allow you to manage
-              plugin-based extensions to Nimbus.
+              No plugins have been installed yet. Install plugins in the plugins
+              directory and restart the server to see them here.
             </CardDescription>
           </CardHeader>
         </Card>
       )}
 
       {plugins && plugins.length > 0 && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {plugins.map((plugin) => (
-            <Card key={plugin.id}>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>{plugin.name}</CardTitle>
-                  <Badge variant={plugin.enabled ? 'default' : 'secondary'}>
-                    {plugin.enabled ? 'Enabled' : 'Disabled'}
-                  </Badge>
-                </div>
-                <CardDescription>
-                  Version {plugin.version}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {plugin.description && (
-                  <p className="text-sm">{plugin.description}</p>
-                )}
-                {plugin.capabilities && plugin.capabilities.length > 0 && (
-                  <div>
-                    <p className="text-sm font-medium mb-2">Capabilities:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {plugin.capabilities.map((cap) => (
-                        <Badge key={cap} variant="outline">
-                          {cap}
-                        </Badge>
-                      ))}
-                    </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {plugins.map((plugin) => {
+            const isActioning = actioningPlugin === plugin.id;
+
+            return (
+              <Card key={plugin.id}>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">{plugin.name}</CardTitle>
+                    <Badge variant={plugin.enabled ? "default" : "secondary"}>
+                      {plugin.enabled ? "Enabled" : "Disabled"}
+                    </Badge>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                  <CardDescription>Version {plugin.version}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {plugin.description && (
+                    <p className="text-sm text-muted-foreground">
+                      {plugin.description}
+                    </p>
+                  )}
+
+                  {plugin.capabilities && plugin.capabilities.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">
+                        Capabilities:
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {plugin.capabilities.map((cap) => (
+                          <Badge
+                            key={cap}
+                            variant="outline"
+                            className="text-xs"
+                          >
+                            {cap}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2">
+                    <Button
+                      onClick={() => handleToggle(plugin.id, plugin.enabled)}
+                      disabled={isActioning}
+                      variant={plugin.enabled ? "outline" : "default"}
+                      className="w-full"
+                      size="sm"
+                    >
+                      {isActioning ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          {plugin.enabled ? "Disabling..." : "Enabling..."}
+                        </>
+                      ) : plugin.enabled ? (
+                        <>
+                          <PowerOff className="mr-2 h-4 w-4" />
+                          Disable
+                        </>
+                      ) : (
+                        <>
+                          <Power className="mr-2 h-4 w-4" />
+                          Enable
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

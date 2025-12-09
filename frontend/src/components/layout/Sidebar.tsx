@@ -30,9 +30,6 @@ const coreNavItems: NavItem[] = [
   { label: "TV Shows", path: "/media/tv", icon: Tv, group: "Media" },
   { label: "Music", path: "/media/music", icon: Music, group: "Media" },
   { label: "Books", path: "/media/books", icon: BookOpen, group: "Media" },
-  { label: "Library Scanner", path: "/library", icon: Scan },
-  { label: "Configuration", path: "/config", icon: Settings },
-  { label: "Plugins", path: "/plugins", icon: Puzzle },
 ];
 
 export function Sidebar() {
@@ -43,6 +40,14 @@ export function Sidebar() {
   const isActive = (path: string) => {
     if (path === "/") {
       return location.pathname === "/";
+    }
+    // For /media path, only match exact path or detail pages, not filtered paths
+    if (path === "/media") {
+      return (
+        location.pathname === "/media" ||
+        (location.pathname.startsWith("/media/") &&
+          /^\/media\/\d+$/.test(location.pathname))
+      );
     }
     return location.pathname.startsWith(path);
   };
@@ -108,6 +113,42 @@ export function Sidebar() {
                 Administration
               </div>
               <div className="space-y-1">
+                <Link
+                  to="/library"
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                    isActive("/library")
+                      ? "bg-secondary text-secondary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  )}
+                >
+                  <Scan className="h-4 w-4" />
+                  Library Scanner
+                </Link>
+                <Link
+                  to="/config"
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                    isActive("/config")
+                      ? "bg-secondary text-secondary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  )}
+                >
+                  <Settings className="h-4 w-4" />
+                  Configuration
+                </Link>
+                <Link
+                  to="/plugins"
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                    isActive("/plugins")
+                      ? "bg-secondary text-secondary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  )}
+                >
+                  <Puzzle className="h-4 w-4" />
+                  Plugins
+                </Link>
                 <Link
                   to="/users"
                   className={cn(

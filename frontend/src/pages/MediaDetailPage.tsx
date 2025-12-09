@@ -1,9 +1,21 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useMediaItem, useUpdateMedia } from '@/lib/api/media';
-import { MediaKindBadge } from '@/components/media/MediaKindBadge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import {
+  useMediaItem,
+  useUpdateMedia,
+  useMediaFiles,
+  useDeleteMediaFile,
+  useDeleteMediaItem,
+} from "@/lib/api/media";
+import { MediaKindBadge } from "@/components/media/MediaKindBadge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -11,32 +23,48 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Loader2, Pencil } from 'lucide-react';
-import { formatDate } from '@/lib/utils';
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  ArrowLeft,
+  Loader2,
+  Pencil,
+  Trash2,
+  X,
+  File,
+  HardDrive,
+} from "lucide-react";
+import { formatDate } from "@/lib/utils";
 
 export function MediaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleteConfirmed, setDeleteConfirmed] = useState(false);
+  const [isFileDeleteOpen, setIsFileDeleteOpen] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState<number | null>(null);
   const [editData, setEditData] = useState({
-    title: '',
-    year: '',
-    description: '',
+    title: "",
+    year: "",
+    description: "",
   });
 
   const { data: media, isLoading, error } = useMediaItem(id!);
+  const { data: files, isLoading: filesLoading } = useMediaFiles(id!);
   const updateMedia = useUpdateMedia(id!);
+  const deleteFile = useDeleteMediaFile();
+  const deleteMediaItem = useDeleteMediaItem();
 
   const handleEdit = () => {
     if (media) {
       setEditData({
         title: media.title,
-        year: media.year?.toString() || '',
-        description: (media.metadata?.description as string) || '',
+        year: media.year?.toString() || "",
+        description: (media.metadata?.description as string) || "",
       });
       setIsEditOpen(true);
     }
@@ -54,8 +82,58 @@ export function MediaDetailPage() {
       });
       setIsEditOpen(false);
     } catch (error) {
-      console.error('Failed to update media:', error);
+      console.error("Failed to update media:", error);
     }
+  };
+
+  const handleDeleteFile = (fileId: number) => {
+    setFileToDelete(fileId);
+    setIsFileDeleteOpen(true);
+  };
+
+  const confirmDeleteFile = async (deletePhysical: boolean) => {
+    if (fileToDelete === null) return;
+
+    try {
+      await deleteFile.mutateAsync({ fileId: fileToDelete, deletePhysical });
+      setIsFileDeleteOpen(false);
+      setFileToDelete(null);
+    } catch (error) {
+      console.error("Failed to delete file:", error);
+      alert("Failed to delete file");
+    }
+  };
+
+  const handleDeleteMedia = () => {
+    setIsDeleteOpen(true);
+    setDeleteConfirmed(false);
+  };
+
+  const confirmDeleteMedia = async (deleteFiles: boolean) => {
+    if (!deleteConfirmed) {
+      alert("Please confirm deletion by checking the box");
+      return;
+    }
+
+    try {
+      await deleteMediaItem.mutateAsync({ mediaId: Number(id), deleteFiles });
+      navigate("/media");
+    } catch (error) {
+      console.error("Failed to delete media item:", error);
+      alert("Failed to delete media item");
+    }
+  };
+
+  const formatFileSize = (bytes: number | null) => {
+    if (bytes === null) return "Unknown";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let size = bytes;
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+    return `${size.toFixed(2)} ${units[unitIndex]}`;
   };
 
   if (error) {
@@ -109,10 +187,16 @@ export function MediaDetailPage() {
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
-        <Button onClick={handleEdit}>
-          <Pencil className="mr-2 h-4 w-4" />
-          Edit
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={handleEdit}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Edit
+          </Button>
+          <Button variant="destructive" onClick={handleDeleteMedia}>
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -164,6 +248,58 @@ export function MediaDetailPage() {
 
         <Card>
           <CardHeader>
+            <CardTitle>Files</CardTitle>
+            <CardDescription>Associated media files</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {filesLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : files && files.length > 0 ? (
+              <div className="space-y-2">
+                {files.map((file) => (
+                  <div
+                    key={file.id}
+                    className="flex items-start justify-between p-3 rounded-lg bg-muted group"
+                  >
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <File className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <p
+                          className="text-sm font-mono truncate"
+                          title={file.path}
+                        >
+                          {file.path.split("/").pop()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span>{formatFileSize(file.size)}</span>
+                        <span>•</span>
+                        <span className="font-mono truncate" title={file.path}>
+                          {file.path}
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => handleDeleteFile(file.id)}
+                    >
+                      <X className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No files</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Metadata</CardTitle>
             <CardDescription>Custom metadata fields</CardDescription>
           </CardHeader>
@@ -184,7 +320,8 @@ export function MediaDetailPage() {
             <CardDescription>External service identifiers</CardDescription>
           </CardHeader>
           <CardContent>
-            {media.external_ids && Object.keys(media.external_ids).length > 0 ? (
+            {media.external_ids &&
+            Object.keys(media.external_ids).length > 0 ? (
               <div className="bg-muted p-3 rounded-md font-mono text-sm overflow-auto max-h-96">
                 <pre>{JSON.stringify(media.external_ids, null, 2)}</pre>
               </div>
@@ -195,6 +332,7 @@ export function MediaDetailPage() {
         </Card>
       </div>
 
+      {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent>
           <DialogHeader>
@@ -231,7 +369,10 @@ export function MediaDetailPage() {
                 id="description"
                 value={editData.description}
                 onChange={(e) =>
-                  setEditData((prev) => ({ ...prev, description: e.target.value }))
+                  setEditData((prev) => ({
+                    ...prev,
+                    description: e.target.value,
+                  }))
                 }
                 rows={4}
               />
@@ -250,6 +391,137 @@ export function MediaDetailPage() {
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Media Dialog */}
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Media Item</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. This will permanently delete the
+              media item from the database.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="confirm-delete"
+                checked={deleteConfirmed}
+                onCheckedChange={(checked) =>
+                  setDeleteConfirmed(checked as boolean)
+                }
+              />
+              <label
+                htmlFor="confirm-delete"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                I understand this action cannot be undone
+              </label>
+            </div>
+            {files && files.length > 0 && (
+              <div className="rounded-lg border border-border p-4 space-y-2">
+                <p className="text-sm font-medium">
+                  This media item has {files.length} associated file(s)
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Choose whether to keep or delete the physical files:
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDeleteOpen(false);
+                setDeleteConfirmed(false);
+              }}
+              disabled={deleteMediaItem.isPending}
+              className="w-full sm:w-auto"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => confirmDeleteMedia(false)}
+              disabled={deleteMediaItem.isPending || !deleteConfirmed}
+              className="w-full sm:w-auto"
+            >
+              {deleteMediaItem.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <HardDrive className="mr-2 h-4 w-4" />
+              )}
+              Delete (Keep Files)
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => confirmDeleteMedia(true)}
+              disabled={deleteMediaItem.isPending || !deleteConfirmed}
+              className="w-full sm:w-auto"
+            >
+              {deleteMediaItem.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
+              Delete (With Files)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete File Dialog */}
+      <Dialog open={isFileDeleteOpen} onOpenChange={setIsFileDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete File</DialogTitle>
+            <DialogDescription>
+              Choose whether to remove just the database entry or also delete
+              the physical file.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsFileDeleteOpen(false);
+                setFileToDelete(null);
+              }}
+              disabled={deleteFile.isPending}
+              className="w-full sm:w-auto"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => confirmDeleteFile(false)}
+              disabled={deleteFile.isPending}
+              className="w-full sm:w-auto"
+            >
+              {deleteFile.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <HardDrive className="mr-2 h-4 w-4" />
+              )}
+              Remove Entry Only
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => confirmDeleteFile(true)}
+              disabled={deleteFile.isPending}
+              className="w-full sm:w-auto"
+            >
+              {deleteFile.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
+              Delete from Disk
             </Button>
           </DialogFooter>
         </DialogContent>

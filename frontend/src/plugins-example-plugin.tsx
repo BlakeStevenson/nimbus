@@ -1,0 +1,1 @@
+/Users/blakestevenson/repos/nimbus/plugins/example-plugin/web/main.tsx

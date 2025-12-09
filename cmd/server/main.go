@@ -19,6 +19,7 @@ import (
 	httpserver "github.com/blakestevenson/nimbus/internal/http"
 	"github.com/blakestevenson/nimbus/internal/logging"
 	"github.com/blakestevenson/nimbus/internal/media"
+	"github.com/blakestevenson/nimbus/internal/plugins"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )
@@ -73,6 +74,27 @@ func main() {
 	// Initialize auth service
 	authService := auth.NewService(queries, jwtManager, passwordProvider, logger)
 
+	// Initialize plugin manager (disabled by default, can be enabled via env var)
+	var pluginManager interface{}
+	if os.Getenv("ENABLE_PLUGINS") == "true" {
+		pluginsDir := os.Getenv("PLUGINS_DIR")
+		if pluginsDir == "" {
+			pluginsDir = "/var/lib/nimbus/plugins" // Default plugins directory
+		}
+
+		pm := plugins.NewPluginManager(queries, configStore, logger, pluginsDir)
+		if err := pm.Initialize(context.Background()); err != nil {
+			logger.Error("Failed to initialize plugin manager", zap.Error(err))
+			// Continue without plugins rather than failing entirely
+		} else {
+			pluginManager = pm
+			logger.Info("Plugin manager initialized", zap.String("plugins_dir", pluginsDir))
+
+			// Ensure cleanup on shutdown
+			defer pm.Shutdown()
+		}
+	}
+
 	// Get library root path from config
 	libraryRootPath := "/media" // Default path
 	if rootPath, err := configStore.Get(context.Background(), "library.root_path"); err == nil {
@@ -84,7 +106,7 @@ func main() {
 	}
 
 	// Initialize HTTP router
-	router := httpserver.NewRouter(mediaService, authService, configStore, queries, libraryRootPath, logger)
+	router := httpserver.NewRouter(mediaService, authService, configStore, queries, libraryRootPath, pluginManager, logger)
 
 	// Create HTTP server
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)

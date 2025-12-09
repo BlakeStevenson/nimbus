@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "github.com/blakestevenson/nimbus/internal/plugins/proto";
+
+// PluginService defines the gRPC service for plugin communication
+service PluginService {
+  rpc Metadata(MetadataRequest) returns (MetadataResponse);
+  rpc APIRoutes(APIRoutesRequest) returns (APIRoutesResponse);
+  rpc HandleAPI(HandleAPIRequest) returns (HandleAPIResponse);
+  rpc UIManifest(UIManifestRequest) returns (UIManifestResponse);
+  rpc HandleEvent(HandleEventRequest) returns (HandleEventResponse);
+}
+
+// Empty request messages
+message MetadataRequest {}
+message APIRoutesRequest {}
+message UIManifestRequest {}
+
+// Metadata response
+message MetadataResponse {
+  string id = 1;
+  string name = 2;
+  string version = 3;
+  string description = 4;
+  repeated string capabilities = 5;
+}
+
+// API Routes response
+message APIRoutesResponse {
+  repeated RouteDescriptor routes = 1;
+}
+
+message RouteDescriptor {
+  string method = 1;
+  string path = 2;
+  string auth = 3;
+  string tag = 4;
+}
+
+// Handle API request/response
+message HandleAPIRequest {
+  string method = 1;
+  string path = 2;
+  map<string, StringList> query = 3;
+  map<string, StringList> headers = 4;
+  bytes body = 5;
+  optional int64 user_id = 6;
+  repeated string scopes = 7;
+}
+
+message StringList {
+  repeated string values = 1;
+}
+
+message HandleAPIResponse {
+  int32 status_code = 1;
+  map<string, StringList> headers = 2;
+  bytes body = 3;
+}
+
+// UI Manifest response
+message UIManifestResponse {
+  repeated UINavItem nav_items = 1;
+  repeated UIRoute routes = 2;
+}
+
+message UINavItem {
+  string label = 1;
+  string path = 2;
+  string group = 3;
+  string icon = 4;
+}
+
+message UIRoute {
+  string path = 1;
+  string bundle_url = 2;
+}
+
+// Event handling
+message HandleEventRequest {
+  string type = 1;
+  bytes data = 2; // JSON-encoded map
+  int64 timestamp = 3;
+}
+
+message HandleEventResponse {
+  bool success = 1;
+  string error = 2;
+}

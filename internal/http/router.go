@@ -22,6 +22,7 @@ func NewRouter(
 	configStore *configstore.Store,
 	queries *generated.Queries,
 	libraryRootPath string,
+	pluginManager interface{}, // *plugins.PluginManager or nil
 	logger *zap.Logger,
 ) http.Handler {
 	r := chi.NewRouter()
@@ -39,6 +40,12 @@ func NewRouter(
 	authHandler := handlers.NewAuthHandler(authService, logger)
 	configHandler := handlers.NewConfigHandler(configStore, logger)
 	libraryHandler := library.NewHandler(queries, logger, libraryRootPath)
+	fileHandler := library.NewFileHandler(queries, logger)
+
+	// Log if plugin manager is provided
+	if pluginManager != nil {
+		logger.Debug("Plugin manager provided to router")
+	}
 
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -76,6 +83,13 @@ func NewRouter(
 				r.Get("/{id}", mediaHandler.GetMediaItem)
 				r.Put("/{id}", mediaHandler.UpdateMediaItem)
 				r.Delete("/{id}", mediaHandler.DeleteMediaItem)
+
+				// Media file routes
+				r.Get("/{id}/files", fileHandler.GetMediaFiles)
+				r.Delete("/{id}/with-files", fileHandler.DeleteMediaItemWithFiles)
+
+				// Individual file deletion
+				r.Delete("/files/{fileId}", fileHandler.DeleteMediaFile)
 			})
 
 			// Type-specific convenience routes
@@ -118,7 +132,27 @@ func NewRouter(
 				})
 			})
 		})
+
+		// Plugin management routes (require authentication and admin)
+		if pluginManager != nil {
+			r.Group(func(r chi.Router) {
+				r.Use(AuthMiddleware(authService, logger))
+				r.Use(RequireAdminMiddleware(logger))
+
+				setupPluginRoutes(r, pluginManager, logger)
+			})
+		}
 	})
+
+	// Serve plugin static files (no auth required for bundles)
+	if pluginManager != nil {
+		setupPluginStaticRoutes(r, pluginManager, logger)
+	}
+
+	// Register plugin API routes (auth handled per-route by plugin descriptor)
+	if pluginManager != nil {
+		registerPluginAPIRoutes(r, pluginManager, authService, logger)
+	}
 
 	return r
 }
