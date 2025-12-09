@@ -1,0 +1,1 @@
+/Users/blakestevenson/repos/nimbus/plugins/usenet-indexer/web/main.tsx

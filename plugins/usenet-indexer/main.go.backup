@@ -1,0 +1,547 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/blakestevenson/nimbus/internal/plugins"
+	"github.com/hashicorp/go-plugin"
+)
+
+// UsenetIndexerPlugin implements the MediaSuitePlugin interface
+type UsenetIndexerPlugin struct{}
+
+// Configuration keys
+const (
+	configPrefix   = "plugins.usenet-indexer"
+	configIndexers = configPrefix + ".indexers"
+)
+
+// IndexerConfig represents a single indexer configuration
+type IndexerConfig struct {
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	URL             string   `json:"url"`
+	APIKey          string   `json:"api_key"`
+	Enabled         bool     `json:"enabled"`
+	Priority        int      `json:"priority"`
+	TVCategories    []string `json:"tv_categories"`
+	MovieCategories []string `json:"movie_categories"`
+	RSSEnabled      bool     `json:"rss_enabled"`
+}
+
+// Metadata returns plugin metadata
+func (p *UsenetIndexerPlugin) Metadata(ctx context.Context) (*plugins.PluginMetadata, error) {
+	return &plugins.PluginMetadata{
+		ID:           "usenet-indexer",
+		Name:         "Usenet Indexer",
+		Version:      "0.1.0",
+		Description:  "Search and index Usenet content using Newznab-compatible indexers",
+		Capabilities: []string{"api", "ui"},
+	}, nil
+}
+
+// APIRoutes returns the HTTP routes this plugin provides
+func (p *UsenetIndexerPlugin) APIRoutes(ctx context.Context) ([]plugins.RouteDescriptor, error) {
+	return []plugins.RouteDescriptor{
+		// Indexer management
+		{
+			Method: "GET",
+			Path:   "/api/plugins/usenet-indexer/indexers",
+			Auth:   "session",
+			Tag:    "",
+		},
+		{
+			Method: "POST",
+			Path:   "/api/plugins/usenet-indexer/indexers",
+			Auth:   "session",
+			Tag:    "",
+		},
+		{
+			Method: "PUT",
+			Path:   "/api/plugins/usenet-indexer/indexers/{id}",
+			Auth:   "session",
+			Tag:    "",
+		},
+		{
+			Method: "DELETE",
+			Path:   "/api/plugins/usenet-indexer/indexers/{id}",
+			Auth:   "session",
+			Tag:    "",
+		},
+		{
+			Method: "POST",
+			Path:   "/api/plugins/usenet-indexer/indexers/{id}/test",
+			Auth:   "session",
+			Tag:    "",
+		},
+		// Search endpoints
+		{
+			Method: "GET",
+			Path:   "/api/plugins/usenet-indexer/search",
+			Auth:   "session",
+			Tag:    "",
+		},
+		{
+			Method: "GET",
+			Path:   "/api/plugins/usenet-indexer/search/tv",
+			Auth:   "session",
+			Tag:    "",
+		},
+		{
+			Method: "GET",
+			Path:   "/api/plugins/usenet-indexer/search/movie",
+			Auth:   "session",
+			Tag:    "",
+		},
+		{
+			Method: "GET",
+			Path:   "/api/plugins/usenet-indexer/rss",
+			Auth:   "session",
+			Tag:    "",
+		},
+	}, nil
+}
+
+// HandleAPI handles HTTP requests for this plugin's routes
+func (p *UsenetIndexerPlugin) HandleAPI(ctx context.Context, req *plugins.PluginHTTPRequest) (*plugins.PluginHTTPResponse, error) {
+	// Handle indexer management endpoints
+	if strings.HasPrefix(req.Path, "/api/plugins/usenet-indexer/indexers") {
+		if req.Path == "/api/plugins/usenet-indexer/indexers" {
+			if req.Method == "GET" {
+				return p.handleListIndexers(ctx, req)
+			}
+			return p.handleCreateIndexer(ctx, req)
+		}
+
+		// Extract indexer ID from path
+		parts := strings.Split(req.Path, "/")
+		if len(parts) >= 6 {
+			indexerID := parts[5]
+
+			if len(parts) == 7 && parts[6] == "test" {
+				return p.handleTestIndexer(ctx, req, indexerID)
+			}
+
+			if req.Method == "PUT" {
+				return p.handleUpdateIndexer(ctx, req, indexerID)
+			}
+			if req.Method == "DELETE" {
+				return p.handleDeleteIndexer(ctx, req, indexerID)
+			}
+		}
+	}
+
+	// Handle search endpoints
+	switch req.Path {
+	case "/api/plugins/usenet-indexer/search":
+		return p.handleSearch(ctx, req)
+	case "/api/plugins/usenet-indexer/search/tv":
+		return p.handleSearchTV(ctx, req)
+	case "/api/plugins/usenet-indexer/search/movie":
+		return p.handleSearchMovie(ctx, req)
+	case "/api/plugins/usenet-indexer/rss":
+		return p.handleRSS(ctx, req)
+	default:
+		return &plugins.PluginHTTPResponse{
+			StatusCode: http.StatusNotFound,
+			Headers:    map[string][]string{"Content-Type": {"application/json"}},
+			Body:       []byte(`{"error":"Not found"}`),
+		}, nil
+	}
+}
+
+// handleGetConfig returns the current configuration
+func (p *UsenetIndexerPlugin) handleGetConfig(ctx context.Context, req *plugins.PluginHTTPRequest) (*plugins.PluginHTTPResponse, error) {
+	if req.SDK == nil {
+		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": "SDK not available"})
+	}
+
+	config := make(map[string]interface{})
+
+	// Get all config values
+	// Note: ConfigGet returns interface{} which handles the SDK's double-JSON-encoding correctly
+	apiURL := p.getStringConfig(ctx, req.SDK, configAPIURL)
+	apiKey := p.getStringConfig(ctx, req.SDK, configAPIKey)
+	enabled := p.getStringConfig(ctx, req.SDK, configEnabled)
+	rssEnabled := p.getStringConfig(ctx, req.SDK, configRSSEnabled)
+	categories := p.getStringConfig(ctx, req.SDK, configCategories)
+	tvCategories := p.getStringConfig(ctx, req.SDK, configTVCategories)
+	movieCategories := p.getStringConfig(ctx, req.SDK, configMovieCategories)
+
+	config["api_url"] = apiURL
+	config["api_key"] = maskAPIKey(apiKey)
+	config["enabled"] = enabled == "true"
+	config["rss_enabled"] = rssEnabled == "true"
+	config["categories"] = parseCategories(categories)
+	config["tv_categories"] = parseCategories(tvCategories)
+	config["movie_categories"] = parseCategories(movieCategories)
+
+	return jsonResponse(http.StatusOK, config)
+}
+
+// handleSetConfig updates the configuration
+func (p *UsenetIndexerPlugin) handleSetConfig(ctx context.Context, req *plugins.PluginHTTPRequest) (*plugins.PluginHTTPResponse, error) {
+	if req.SDK == nil {
+		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": "SDK not available"})
+	}
+
+	var config map[string]interface{}
+	if err := json.Unmarshal(req.Body, &config); err != nil {
+		return jsonResponse(http.StatusBadRequest, map[string]string{"error": "Invalid JSON"})
+	}
+
+	// Save configuration
+	if apiURL, ok := config["api_url"].(string); ok {
+		req.SDK.ConfigSet(ctx, configAPIURL, apiURL)
+	}
+	if apiKey, ok := config["api_key"].(string); ok && !strings.Contains(apiKey, "*") {
+		// Only save if it's not the masked version
+		req.SDK.ConfigSet(ctx, configAPIKey, apiKey)
+	}
+	if enabled, ok := config["enabled"].(bool); ok {
+		req.SDK.ConfigSet(ctx, configEnabled, fmt.Sprintf("%t", enabled))
+	}
+	if rssEnabled, ok := config["rss_enabled"].(bool); ok {
+		req.SDK.ConfigSet(ctx, configRSSEnabled, fmt.Sprintf("%t", rssEnabled))
+	}
+	if categories, ok := config["categories"].([]interface{}); ok {
+		catStrings := make([]string, len(categories))
+		for i, c := range categories {
+			catStrings[i] = fmt.Sprintf("%v", c)
+		}
+		req.SDK.ConfigSet(ctx, configCategories, strings.Join(catStrings, ","))
+	}
+	if tvCategories, ok := config["tv_categories"].([]interface{}); ok {
+		catStrings := make([]string, len(tvCategories))
+		for i, c := range tvCategories {
+			catStrings[i] = fmt.Sprintf("%v", c)
+		}
+		req.SDK.ConfigSet(ctx, configTVCategories, strings.Join(catStrings, ","))
+	}
+	if movieCategories, ok := config["movie_categories"].([]interface{}); ok {
+		catStrings := make([]string, len(movieCategories))
+		for i, c := range movieCategories {
+			catStrings[i] = fmt.Sprintf("%v", c)
+		}
+		req.SDK.ConfigSet(ctx, configMovieCategories, strings.Join(catStrings, ","))
+	}
+
+	return jsonResponse(http.StatusOK, map[string]string{"message": "Configuration saved"})
+}
+
+// handleTestConnection tests the connection to the Newznab indexer
+func (p *UsenetIndexerPlugin) handleTestConnection(ctx context.Context, req *plugins.PluginHTTPRequest) (*plugins.PluginHTTPResponse, error) {
+	if req.SDK == nil {
+		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": "SDK not available"})
+	}
+
+	apiURL := p.getStringConfig(ctx, req.SDK, configAPIURL)
+	if apiURL == "" {
+		return jsonResponse(http.StatusBadRequest, map[string]string{"error": "API URL not configured"})
+	}
+
+	apiKey := p.getStringConfig(ctx, req.SDK, configAPIKey)
+	if apiKey == "" {
+		return jsonResponse(http.StatusBadRequest, map[string]string{"error": "API key not configured"})
+	}
+
+	client := NewNewznabClient(apiURL, apiKey)
+	if err := client.TestConnection(); err != nil {
+		return jsonResponse(http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+	}
+
+	return jsonResponse(http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "Connection successful",
+	})
+}
+
+// handleSearch performs a general search
+func (p *UsenetIndexerPlugin) handleSearch(ctx context.Context, req *plugins.PluginHTTPRequest) (*plugins.PluginHTTPResponse, error) {
+	if req.SDK == nil {
+		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": "SDK not available"})
+	}
+
+	client, err := p.getClient(ctx, req.SDK)
+	if err != nil {
+		return jsonResponse(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	params := p.parseSearchParams(req.Query)
+	releases, err := client.Search(params)
+	if err != nil {
+		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return jsonResponse(http.StatusOK, map[string]interface{}{
+		"releases": releases,
+		"count":    len(releases),
+	})
+}
+
+// handleSearchTV performs a TV show search
+func (p *UsenetIndexerPlugin) handleSearchTV(ctx context.Context, req *plugins.PluginHTTPRequest) (*plugins.PluginHTTPResponse, error) {
+	if req.SDK == nil {
+		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": "SDK not available"})
+	}
+
+	client, err := p.getClient(ctx, req.SDK)
+	if err != nil {
+		return jsonResponse(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	params := p.parseSearchParams(req.Query)
+
+	// Use TV categories if not specified
+	if len(params.Categories) == 0 {
+		tvCats := p.getStringConfig(ctx, req.SDK, configTVCategories)
+		params.Categories = parseCategories(tvCats)
+	}
+
+	releases, err := client.SearchTV(params)
+	if err != nil {
+		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return jsonResponse(http.StatusOK, map[string]interface{}{
+		"releases": releases,
+		"count":    len(releases),
+	})
+}
+
+// handleSearchMovie performs a movie search
+func (p *UsenetIndexerPlugin) handleSearchMovie(ctx context.Context, req *plugins.PluginHTTPRequest) (*plugins.PluginHTTPResponse, error) {
+	if req.SDK == nil {
+		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": "SDK not available"})
+	}
+
+	client, err := p.getClient(ctx, req.SDK)
+	if err != nil {
+		return jsonResponse(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	params := p.parseSearchParams(req.Query)
+
+	// Use movie categories if not specified
+	if len(params.Categories) == 0 {
+		movieCats := p.getStringConfig(ctx, req.SDK, configMovieCategories)
+		params.Categories = parseCategories(movieCats)
+	}
+
+	releases, err := client.SearchMovie(params)
+	if err != nil {
+		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return jsonResponse(http.StatusOK, map[string]interface{}{
+		"releases": releases,
+		"count":    len(releases),
+	})
+}
+
+// handleRSS returns the RSS feed
+func (p *UsenetIndexerPlugin) handleRSS(ctx context.Context, req *plugins.PluginHTTPRequest) (*plugins.PluginHTTPResponse, error) {
+	if req.SDK == nil {
+		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": "SDK not available"})
+	}
+
+	// Check if RSS is enabled
+	rssEnabled := p.getStringConfig(ctx, req.SDK, configRSSEnabled)
+	if rssEnabled != "true" {
+		return jsonResponse(http.StatusForbidden, map[string]string{"error": "RSS feed is not enabled"})
+	}
+
+	client, err := p.getClient(ctx, req.SDK)
+	if err != nil {
+		return jsonResponse(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	// Get categories
+	categories := []string{}
+	if cats := req.Query["categories"]; len(cats) > 0 {
+		categories = strings.Split(cats[0], ",")
+	} else {
+		// Use configured categories
+		catStr := p.getStringConfig(ctx, req.SDK, configCategories)
+		categories = parseCategories(catStr)
+	}
+
+	// Get limit
+	limit := 100
+	if limitStr := req.Query["limit"]; len(limitStr) > 0 {
+		if l, err := strconv.Atoi(limitStr[0]); err == nil {
+			limit = l
+		}
+	}
+
+	releases, err := client.GetRSSFeed(categories, limit)
+	if err != nil {
+		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return jsonResponse(http.StatusOK, map[string]interface{}{
+		"releases": releases,
+		"count":    len(releases),
+	})
+}
+
+// UIManifest returns the UI configuration for this plugin
+func (p *UsenetIndexerPlugin) UIManifest(ctx context.Context) (*plugins.UIManifest, error) {
+	return &plugins.UIManifest{
+		NavItems: []plugins.UINavItem{
+			{
+				Label: "Usenet Indexer",
+				Path:  "/plugins/usenet-indexer",
+				Icon:  "download",
+			},
+		},
+		Routes: []plugins.UIRoute{
+			{
+				Path:      "/plugins/usenet-indexer",
+				BundleURL: "/src/plugins-usenet-indexer.tsx",
+			},
+		},
+	}, nil
+}
+
+// HandleEvent handles system events (not implemented)
+func (p *UsenetIndexerPlugin) HandleEvent(ctx context.Context, evt plugins.Event) error {
+	return nil
+}
+
+// Helper functions
+
+// getStringConfig retrieves a string config value, handling the SDK's double-encoding issue
+func (p *UsenetIndexerPlugin) getStringConfig(ctx context.Context, sdk plugins.SDKInterface, key string) string {
+	val, err := sdk.ConfigGet(ctx, key)
+	if err != nil {
+		return ""
+	}
+
+	// Handle different types that might be returned due to double-encoding
+	switch v := val.(type) {
+	case string:
+		return v
+	case []byte:
+		// If it's bytes, try to unmarshal as string
+		var str string
+		if err := json.Unmarshal(v, &str); err == nil {
+			return str
+		}
+		return string(v)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+func (p *UsenetIndexerPlugin) getClient(ctx context.Context, sdk plugins.SDKInterface) (*NewznabClient, error) {
+	apiURL := p.getStringConfig(ctx, sdk, configAPIURL)
+	if apiURL == "" {
+		return nil, fmt.Errorf("API URL not configured")
+	}
+
+	apiKey := p.getStringConfig(ctx, sdk, configAPIKey)
+	if apiKey == "" {
+		return nil, fmt.Errorf("API key not configured")
+	}
+
+	return NewNewznabClient(apiURL, apiKey), nil
+}
+
+func (p *UsenetIndexerPlugin) parseSearchParams(query map[string][]string) SearchParams {
+	params := SearchParams{}
+
+	if q := query["q"]; len(q) > 0 {
+		params.Query = q[0]
+	}
+	if cats := query["categories"]; len(cats) > 0 {
+		params.Categories = strings.Split(cats[0], ",")
+	}
+	if tvdbid := query["tvdbid"]; len(tvdbid) > 0 {
+		params.TVDBID = tvdbid[0]
+	}
+	if tvrageid := query["tvrageid"]; len(tvrageid) > 0 {
+		params.TVRageID = tvrageid[0]
+	}
+	if imdbid := query["imdbid"]; len(imdbid) > 0 {
+		params.IMDBID = imdbid[0]
+	}
+	if season := query["season"]; len(season) > 0 {
+		if s, err := strconv.Atoi(season[0]); err == nil {
+			params.Season = s
+		}
+	}
+	if episode := query["episode"]; len(episode) > 0 {
+		if e, err := strconv.Atoi(episode[0]); err == nil {
+			params.Episode = e
+		}
+	}
+	if limit := query["limit"]; len(limit) > 0 {
+		if l, err := strconv.Atoi(limit[0]); err == nil {
+			params.Limit = l
+		}
+	}
+	if offset := query["offset"]; len(offset) > 0 {
+		if o, err := strconv.Atoi(offset[0]); err == nil {
+			params.Offset = o
+		}
+	}
+
+	return params
+}
+
+func parseCategories(catStr string) []string {
+	if catStr == "" {
+		return []string{}
+	}
+	return strings.Split(catStr, ",")
+}
+
+func maskAPIKey(key string) string {
+	if key == "" {
+		return ""
+	}
+	if len(key) <= 8 {
+		return strings.Repeat("*", len(key))
+	}
+	return key[:4] + strings.Repeat("*", len(key)-8) + key[len(key)-4:]
+}
+
+func jsonResponse(statusCode int, data interface{}) (*plugins.PluginHTTPResponse, error) {
+	body, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return &plugins.PluginHTTPResponse{
+		StatusCode: statusCode,
+		Headers: map[string][]string{
+			"Content-Type": {"application/json"},
+		},
+		Body: body,
+	}, nil
+}
+
+func main() {
+	// Create plugin instance
+	usenetPlugin := &UsenetIndexerPlugin{}
+
+	// Serve the plugin using go-plugin
+	plugin.Serve(&plugin.ServeConfig{
+		HandshakeConfig: plugins.Handshake,
+		Plugins: map[string]plugin.Plugin{
+			"media-suite": &plugins.MediaSuitePluginGRPC{
+				Impl: usenetPlugin,
+			},
+		},
+		GRPCServer: plugin.DefaultGRPCServer,
+	})
+}

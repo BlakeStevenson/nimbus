@@ -1,0 +1,9 @@
+{
+  "id": "nzb-downloader",
+  "name": "NZB Downloader",
+  "description": "Download NZB files from Usenet with queue management and monitoring",
+  "version": "0.1.0",
+  "executable": "nzb-downloader",
+  "webDir": "web",
+  "capabilities": ["api", "ui"]
+}

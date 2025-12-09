@@ -1,0 +1,9 @@
+{
+  "id": "usenet-indexer",
+  "name": "Usenet Indexer",
+  "description": "Search and index Usenet content using Newznab-compatible indexers",
+  "version": "0.1.0",
+  "executable": "usenet-indexer",
+  "webDir": "web",
+  "capabilities": ["api", "ui"]
+}

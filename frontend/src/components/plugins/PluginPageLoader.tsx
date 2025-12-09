@@ -28,6 +28,10 @@ export const PluginPageLoader: React.FC<PluginPageLoaderProps> = ({
     const pluginModules: Record<string, () => Promise<any>> = {
       "/src/plugins-example-plugin.tsx": () =>
         import("@/plugins-example-plugin"),
+      "/src/plugins-usenet-indexer.tsx": () =>
+        import("@/plugins-usenet-indexer"),
+      "/src/plugins-nzb-downloader.tsx": () =>
+        import("@/plugins-nzb-downloader"),
     };
 
     const loader = pluginModules[bundleUrl];

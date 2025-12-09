@@ -12,6 +12,7 @@ import { MediaKindBadge } from "@/components/media/MediaKindBadge";
 import { MediaGrid } from "@/components/media/MediaGrid";
 import { MediaTable } from "@/components/media/MediaTable";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -41,6 +42,10 @@ import {
   HardDrive,
   LayoutGrid,
   Table,
+  Star,
+  Clock,
+  Calendar,
+  Plus,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
@@ -56,7 +61,7 @@ export function MediaDetailPage() {
   const [editData, setEditData] = useState({
     title: "",
     year: "",
-    description: "",
+    metadata: {} as Record<string, unknown>,
   });
 
   const { data: media, isLoading, error } = useMediaItem(id!);
@@ -79,7 +84,7 @@ export function MediaDetailPage() {
       setEditData({
         title: media.title,
         year: media.year?.toString() || "",
-        description: (media.metadata?.description as string) || "",
+        metadata: (media.metadata as Record<string, unknown>) || {},
       });
       setIsEditOpen(true);
     }
@@ -90,14 +95,39 @@ export function MediaDetailPage() {
       await updateMedia.mutateAsync({
         title: editData.title,
         year: editData.year ? parseInt(editData.year) : null,
-        metadata: {
-          ...media?.metadata,
-          description: editData.description,
-        },
+        metadata: editData.metadata,
       });
       setIsEditOpen(false);
     } catch (error) {
       console.error("Failed to update media:", error);
+    }
+  };
+
+  const handleMetadataChange = (key: string, value: unknown) => {
+    setEditData((prev) => ({
+      ...prev,
+      metadata: {
+        ...prev.metadata,
+        [key]: value,
+      },
+    }));
+  };
+
+  const handleDeleteMetadataField = (key: string) => {
+    setEditData((prev) => {
+      const newMetadata = { ...prev.metadata };
+      delete newMetadata[key];
+      return {
+        ...prev,
+        metadata: newMetadata,
+      };
+    });
+  };
+
+  const handleAddMetadataField = () => {
+    const key = prompt("Enter metadata field name:");
+    if (key && key.trim()) {
+      handleMetadataChange(key.trim(), "");
     }
   };
 
@@ -151,6 +181,102 @@ export function MediaDetailPage() {
     return `${size.toFixed(2)} ${units[unitIndex]}`;
   };
 
+  const formatRuntime = (minutes: number) => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours > 0) {
+      return `${hours}h ${mins}m`;
+    }
+    return `${mins}m`;
+  };
+
+  const getBackdropUrl = () => {
+    if (!media?.metadata || typeof media.metadata !== "object") {
+      // For TV seasons without metadata, try parent backdrop
+      if (
+        media?.kind === "tv_season" &&
+        parentMedia?.metadata &&
+        typeof parentMedia.metadata === "object"
+      ) {
+        const parentMetadata = parentMedia.metadata as Record<string, unknown>;
+        return parentMetadata.backdrop_url as string | null;
+      }
+      return null;
+    }
+
+    const metadata = media.metadata as Record<string, unknown>;
+
+    // For episodes, prefer still_url, fallback to backdrop_url
+    if (media.kind === "tv_episode" && metadata.still_url) {
+      return metadata.still_url as string;
+    }
+
+    // Check for backdrop_url
+    if (metadata.backdrop_url) {
+      return metadata.backdrop_url as string;
+    }
+
+    // For TV seasons without backdrop, use parent's backdrop
+    if (
+      media.kind === "tv_season" &&
+      parentMedia?.metadata &&
+      typeof parentMedia.metadata === "object"
+    ) {
+      const parentMetadata = parentMedia.metadata as Record<string, unknown>;
+      return parentMetadata.backdrop_url as string | null;
+    }
+
+    return null;
+  };
+
+  const getRating = () => {
+    if (!media?.metadata || typeof media.metadata !== "object") return null;
+    const metadata = media.metadata as Record<string, unknown>;
+    return metadata.rating as number | undefined;
+  };
+
+  const getRuntime = () => {
+    if (!media?.metadata || typeof media.metadata !== "object") return null;
+    const metadata = media.metadata as Record<string, unknown>;
+    return metadata.runtime as number | undefined;
+  };
+
+  const getAirDate = () => {
+    if (!media?.metadata || typeof media.metadata !== "object") return null;
+    const metadata = media.metadata as Record<string, unknown>;
+    return (metadata.air_date ||
+      metadata.first_air_date ||
+      metadata.release_date) as string | undefined;
+  };
+
+  const getDescription = () => {
+    if (!media?.metadata || typeof media.metadata !== "object") return null;
+    const metadata = media.metadata as Record<string, unknown>;
+    return metadata.description as string | undefined;
+  };
+
+  const getGenres = () => {
+    if (!media?.metadata || typeof media.metadata !== "object") return null;
+    const metadata = media.metadata as Record<string, unknown>;
+    const genres = metadata.genres;
+    if (Array.isArray(genres)) {
+      // Handle both string array and object array {id, name}
+      return genres.map((genre) => {
+        if (typeof genre === "string") {
+          return genre;
+        } else if (
+          typeof genre === "object" &&
+          genre !== null &&
+          "name" in genre
+        ) {
+          return (genre as { name: string }).name;
+        }
+        return String(genre);
+      });
+    }
+    return null;
+  };
+
   if (error) {
     return (
       <div className="space-y-6">
@@ -195,77 +321,249 @@ export function MediaDetailPage() {
     );
   }
 
+  const backdropUrl = getBackdropUrl();
+  const rating = getRating();
+  const runtime = getRuntime();
+  const airDate = getAirDate();
+  const description = getDescription();
+  const genres = getGenres();
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <Button variant="ghost" onClick={() => navigate(-1)}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back
-        </Button>
-        <div className="flex gap-2">
-          <Button onClick={handleEdit}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Edit
-          </Button>
-          <Button variant="destructive" onClick={handleDeleteMedia}>
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete
-          </Button>
-        </div>
-      </div>
+      {/* Backdrop Header */}
+      {backdropUrl ? (
+        <div className="relative -mx-6 -mt-6">
+          <div className="relative h-[500px] overflow-hidden">
+            {/* Backdrop Image */}
+            <img
+              src={backdropUrl}
+              alt={media.title}
+              className="w-full h-full object-cover"
+            />
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            {/* For seasons, show series name */}
-            {media.kind === "tv_season" && parentMedia && (
-              <>
-                <button
-                  onClick={() => navigate(`/media/${parentMedia.id}`)}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {parentMedia.title}
-                </button>
-                <span className="text-muted-foreground">/</span>
-              </>
-            )}
-            {/* For episodes, show series name and season */}
-            {media.kind === "tv_episode" && grandparentMedia && parentMedia && (
-              <>
-                <button
-                  onClick={() => navigate(`/media/${grandparentMedia.id}`)}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {grandparentMedia.title}
-                </button>
-                <span className="text-muted-foreground">/</span>
-                <button
-                  onClick={() => navigate(`/media/${parentMedia.id}`)}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {parentMedia.title}
-                </button>
-                <span className="text-muted-foreground">/</span>
-              </>
-            )}
-            <span>
-              {media.kind === "tv_episode" &&
-                media.metadata &&
-                typeof media.metadata === "object" &&
-                (media.metadata as Record<string, unknown>).episode && (
-                  <span className="text-muted-foreground">
-                    E{(media.metadata as Record<string, unknown>).episode}{" "}
-                  </span>
-                )}
-              {media.title}
-            </span>
-          </h1>
-          <MediaKindBadge kind={media.kind} />
+            {/* Gradient Overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
+
+            {/* Content Overlay */}
+            <div className="absolute inset-0 flex flex-col justify-end">
+              <div className="px-6 pb-8 space-y-4">
+                {/* Navigation Buttons */}
+                <div className="flex items-center justify-between">
+                  <Button variant="secondary" onClick={() => navigate(-1)}>
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Back
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="secondary" onClick={handleEdit}>
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Edit
+                    </Button>
+                    <Button variant="destructive" onClick={handleDeleteMedia}>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Title and Metadata */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h1 className="text-4xl font-bold flex items-center gap-2 dark:text-white drop-shadow-lg">
+                      {/* For seasons, show series name */}
+                      {media.kind === "tv_season" && parentMedia && (
+                        <>
+                          <button
+                            onClick={() => navigate(`/media/${parentMedia.id}`)}
+                            className="dark:text-white/80 dark:hover:text-white hover:text-gray-500 transition-colors"
+                          >
+                            {parentMedia.title}
+                          </button>
+                          <span className="dark:text-white/80">/</span>
+                        </>
+                      )}
+                      {/* For episodes, show series name and season */}
+                      {media.kind === "tv_episode" &&
+                        grandparentMedia &&
+                        parentMedia && (
+                          <>
+                            <button
+                              onClick={() =>
+                                navigate(`/media/${grandparentMedia.id}`)
+                              }
+                              className="dark:text-white/80 dark:hover:text-white text-gray-700 hover:text-gray-500 transition-colors"
+                            >
+                              {grandparentMedia.title}
+                            </button>
+                            <span className="dark:text-white/80 text-gray-700">
+                              /
+                            </span>
+                            <button
+                              onClick={() =>
+                                navigate(`/media/${parentMedia.id}`)
+                              }
+                              className="dark:text-white/80 dark:hover:text-white text-gray-700 hover:text-gray-500 transition-colors"
+                            >
+                              {parentMedia.title}
+                            </button>
+                            <span className="dark:text-white/80 text-gray-700">
+                              /
+                            </span>
+                          </>
+                        )}
+                      <span>
+                        {media.kind === "tv_episode" &&
+                        media.metadata &&
+                        typeof media.metadata === "object" &&
+                        (media.metadata as Record<string, unknown>).episode ? (
+                          <span className="dark:text-white/80 text-gray-700">
+                            E
+                            {String(
+                              (media.metadata as Record<string, unknown>)
+                                .episode,
+                            )}{" "}
+                          </span>
+                        ) : null}
+                        {media.title}
+                      </span>
+                    </h1>
+                    <MediaKindBadge kind={media.kind} />
+                  </div>
+
+                  {/* Metadata Row */}
+                  <div className="flex items-center gap-4 flex-wrap dark:text-white/90 drop-shadow">
+                    {media.year && (
+                      <span className="text-lg font-medium">{media.year}</span>
+                    )}
+                    {rating && (
+                      <div className="flex items-center gap-1">
+                        <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                        <span className="font-medium">{rating.toFixed(1)}</span>
+                      </div>
+                    )}
+                    {runtime && (
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        <span>{formatRuntime(runtime)}</span>
+                      </div>
+                    )}
+                    {airDate && (
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-4 w-4" />
+                        <span>{new Date(airDate).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Genres */}
+                  {genres && genres.length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {genres.map((genre) => (
+                        <Badge
+                          key={genre}
+                          variant="secondary"
+                          className="dark:bg-white/20 dark:text-white dark:border-white/30 dark:hover:bg-white/30 bg-slate-400 text-gray-800 border-slate-400 hover:bg-slate-300"
+                        >
+                          {genre}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Description */}
+                  {description && (
+                    <p className="dark:text-white/90 max-w-4xl text-lg drop-shadow line-clamp-3">
+                      {description}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        {media.year && (
-          <p className="text-lg text-muted-foreground">{media.year}</p>
-        )}
-      </div>
+      ) : (
+        <>
+          {/* Fallback Header (no backdrop) */}
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" onClick={() => navigate(-1)}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
+            </Button>
+            <div className="flex gap-2">
+              <Button onClick={handleEdit}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteMedia}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-3xl font-bold flex items-center gap-2">
+                {/* For seasons, show series name */}
+                {media.kind === "tv_season" && parentMedia && (
+                  <>
+                    <button
+                      onClick={() => navigate(`/media/${parentMedia.id}`)}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {parentMedia.title}
+                    </button>
+                    <span className="text-muted-foreground">/</span>
+                  </>
+                )}
+                {/* For episodes, show series name and season */}
+                {media.kind === "tv_episode" &&
+                  grandparentMedia &&
+                  parentMedia && (
+                    <>
+                      <button
+                        onClick={() =>
+                          navigate(`/media/${grandparentMedia.id}`)
+                        }
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {grandparentMedia.title}
+                      </button>
+                      <span className="text-muted-foreground">/</span>
+                      <button
+                        onClick={() => navigate(`/media/${parentMedia.id}`)}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {parentMedia.title}
+                      </button>
+                      <span className="text-muted-foreground">/</span>
+                    </>
+                  )}
+                <span>
+                  {media.kind === "tv_episode" &&
+                  media.metadata &&
+                  typeof media.metadata === "object" &&
+                  (media.metadata as Record<string, unknown>).episode ? (
+                    <span className="text-muted-foreground">
+                      E
+                      {String(
+                        (media.metadata as Record<string, unknown>).episode,
+                      )}{" "}
+                    </span>
+                  ) : null}
+                  {media.title}
+                </span>
+              </h1>
+              <MediaKindBadge kind={media.kind} />
+            </div>
+            {media.year && (
+              <p className="text-lg text-muted-foreground">{media.year}</p>
+            )}
+            {description && (
+              <p className="text-muted-foreground mt-2">{description}</p>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Children Section */}
       {(childrenLoading ||
@@ -406,48 +704,15 @@ export function MediaDetailPage() {
             )}
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Metadata</CardTitle>
-            <CardDescription>Custom metadata fields</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {media.metadata && Object.keys(media.metadata).length > 0 ? (
-              <div className="bg-muted p-3 rounded-md font-mono text-sm overflow-auto max-h-96">
-                <pre>{JSON.stringify(media.metadata, null, 2)}</pre>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No metadata</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>External IDs</CardTitle>
-            <CardDescription>External service identifiers</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {media.external_ids &&
-            Object.keys(media.external_ids).length > 0 ? (
-              <div className="bg-muted p-3 rounded-md font-mono text-sm overflow-auto max-h-96">
-                <pre>{JSON.stringify(media.external_ids, null, 2)}</pre>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No external IDs</p>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Media Item</DialogTitle>
             <DialogDescription>
-              Update basic information for this media item
+              Update information and metadata for this media item
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -472,19 +737,111 @@ export function MediaDetailPage() {
                 }
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={editData.description}
-                onChange={(e) =>
-                  setEditData((prev) => ({
-                    ...prev,
-                    description: e.target.value,
-                  }))
-                }
-                rows={4}
-              />
+
+            {/* Metadata Fields */}
+            <div className="space-y-3 pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-semibold">Metadata</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddMetadataField}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Field
+                </Button>
+              </div>
+
+              {Object.entries(editData.metadata).map(([key, value]) => {
+                const isTextarea =
+                  typeof value === "string" && value.length > 100;
+                const isNumber = typeof value === "number";
+                const isBoolean = typeof value === "boolean";
+                const isObject = typeof value === "object" && value !== null;
+
+                return (
+                  <div key={key} className="grid gap-2 p-3 border rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <Label
+                        htmlFor={`metadata-${key}`}
+                        className="font-medium"
+                      >
+                        {key}
+                      </Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteMetadataField(key)}
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    {isObject ? (
+                      <Textarea
+                        id={`metadata-${key}`}
+                        value={JSON.stringify(value, null, 2)}
+                        onChange={(e) => {
+                          try {
+                            const parsed = JSON.parse(e.target.value);
+                            handleMetadataChange(key, parsed);
+                          } catch {
+                            // Keep editing invalid JSON
+                            handleMetadataChange(key, e.target.value);
+                          }
+                        }}
+                        rows={4}
+                        className="font-mono text-sm"
+                      />
+                    ) : isBoolean ? (
+                      <div className="flex items-center space-x-2">
+                        <input
+                          id={`metadata-${key}`}
+                          type="checkbox"
+                          checked={value}
+                          onChange={(e) =>
+                            handleMetadataChange(key, e.target.checked)
+                          }
+                          className="h-4 w-4 rounded border-input"
+                        />
+                        <Label htmlFor={`metadata-${key}`} className="text-sm">
+                          {value ? "True" : "False"}
+                        </Label>
+                      </div>
+                    ) : isTextarea ? (
+                      <Textarea
+                        id={`metadata-${key}`}
+                        value={String(value)}
+                        onChange={(e) =>
+                          handleMetadataChange(key, e.target.value)
+                        }
+                        rows={4}
+                      />
+                    ) : (
+                      <Input
+                        id={`metadata-${key}`}
+                        type={isNumber ? "number" : "text"}
+                        value={String(value)}
+                        onChange={(e) => {
+                          const newValue = isNumber
+                            ? parseFloat(e.target.value)
+                            : e.target.value;
+                          handleMetadataChange(key, newValue);
+                        }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+
+              {Object.keys(editData.metadata).length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No metadata fields. Click "Add Field" to create one.
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>

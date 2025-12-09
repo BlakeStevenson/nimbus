@@ -1,3 +1,4 @@
+import { useLocation } from "react-router-dom";
 import { usePluginUIManifests } from "@/lib/api/plugins";
 import { PluginPageLoader } from "./PluginPageLoader";
 
@@ -7,6 +8,7 @@ import { PluginPageLoader } from "./PluginPageLoader";
  * matches any plugin route.
  */
 export const DynamicPluginRoute: React.FC = () => {
+  const location = useLocation();
   const { data: manifests, isLoading } = usePluginUIManifests();
 
   if (isLoading) {
@@ -31,13 +33,15 @@ export const DynamicPluginRoute: React.FC = () => {
   }
 
   // Find the matching plugin route based on current path
-  const currentPath = window.location.pathname;
+  const currentPath = location.pathname;
 
   for (const manifest of manifests) {
     for (const route of manifest.routes) {
       // Simple path matching (you might want to use a more sophisticated matcher)
       if (currentPath.startsWith(route.path) || currentPath === route.path) {
-        return <PluginPageLoader bundleUrl={route.bundleUrl} />;
+        return (
+          <PluginPageLoader key={currentPath} bundleUrl={route.bundleUrl} />
+        );
       }
     }
   }

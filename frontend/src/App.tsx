@@ -2,16 +2,19 @@ import { RouterProvider } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import { queryClient } from "@/lib/query-client";
 import { router } from "@/router/routes";
 
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <RouterProvider router={router} />
-        <ReactQueryDevtools initialIsOpen={false} />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <RouterProvider router={router} />
+          <ReactQueryDevtools initialIsOpen={false} />
+        </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

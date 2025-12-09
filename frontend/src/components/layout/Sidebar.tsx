@@ -54,6 +54,10 @@ export function Sidebar() {
           /^\/media\/\d+$/.test(location.pathname))
       );
     }
+    // For /plugins path, only match exact path, not plugin extension pages
+    if (path === "/plugins") {
+      return location.pathname === "/plugins";
+    }
     return location.pathname.startsWith(path);
   };
 

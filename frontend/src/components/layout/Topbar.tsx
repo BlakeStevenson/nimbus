@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Search, User as UserIcon, LogOut } from "lucide-react";
+import { Search, User as UserIcon, LogOut, Moon, Sun } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useLogout } from "@/lib/api/auth";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ export function Topbar() {
   const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const logout = useLogout();
 
   const handleSearch = (e: React.FormEvent) => {
@@ -56,6 +58,19 @@ export function Topbar() {
         </form>
 
         <div className="ml-auto flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            aria-label="Toggle theme"
+          >
+            {theme === "light" ? (
+              <Moon className="h-5 w-5" />
+            ) : (
+              <Sun className="h-5 w-5" />
+            )}
+          </Button>
+
           {user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

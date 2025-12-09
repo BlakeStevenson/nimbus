@@ -63,14 +63,11 @@ func (sdk *SDK) ConfigGetString(ctx context.Context, key string) (string, error)
 }
 
 // ConfigSet stores a configuration value
-// The value is JSON-encoded before storage
+// The value is JSON-encoded before storage by configStore
 func (sdk *SDK) ConfigSet(ctx context.Context, key string, value interface{}) error {
-	jsonValue, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Errorf("failed to marshal config value: %w", err)
-	}
-
-	if err := sdk.configStore.Set(ctx, key, jsonValue); err != nil {
+	// Pass the raw value to configStore.Set, which will handle JSON marshaling
+	// (Previously this was double-encoding by marshaling here AND in configStore.Set)
+	if err := sdk.configStore.Set(ctx, key, value); err != nil {
 		return fmt.Errorf("failed to set config key %s: %w", key, err)
 	}
 
