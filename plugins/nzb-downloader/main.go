@@ -46,23 +46,24 @@ type NNTPServer struct {
 
 // Download represents a download job
 type Download struct {
-	ID              string       `json:"id"`
-	Name            string       `json:"name"`
-	Status          string       `json:"status"` // queued, downloading, paused, completed, failed
-	Progress        float64      `json:"progress"`
-	TotalBytes      int64        `json:"total_bytes"`
-	DownloadedBytes int64        `json:"downloaded_bytes"`
-	Speed           int64        `json:"speed"` // bytes per second
-	ETA             int64        `json:"eta"`   // seconds
-	AddedAt         time.Time    `json:"added_at"`
-	StartedAt       *time.Time   `json:"started_at,omitempty"`
-	CompletedAt     *time.Time   `json:"completed_at,omitempty"`
-	Error           string       `json:"error,omitempty"`
-	NZBData         *NZB         `json:"-"`
-	Servers         []NNTPServer `json:"-"`              // Snapshot of enabled servers at time of creation
-	DownloadDir     string       `json:"-"`              // Download directory
-	Logs            []string     `json:"logs,omitempty"` // Recent log messages
-	logMu           sync.Mutex   `json:"-"`
+	ID              string             `json:"id"`
+	Name            string             `json:"name"`
+	Status          string             `json:"status"` // queued, downloading, processing, paused, completed, failed
+	Progress        float64            `json:"progress"`
+	TotalBytes      int64              `json:"total_bytes"`
+	DownloadedBytes int64              `json:"downloaded_bytes"`
+	Speed           int64              `json:"speed"` // bytes per second
+	ETA             int64              `json:"eta"`   // seconds
+	AddedAt         time.Time          `json:"added_at"`
+	StartedAt       *time.Time         `json:"started_at,omitempty"`
+	CompletedAt     *time.Time         `json:"completed_at,omitempty"`
+	Error           string             `json:"error,omitempty"`
+	NZBData         *NZB               `json:"-"`
+	Servers         []NNTPServer       `json:"-"`              // Snapshot of enabled servers at time of creation
+	DownloadDir     string             `json:"-"`              // Download directory
+	Logs            []string           `json:"logs,omitempty"` // Recent log messages
+	logMu           sync.Mutex         `json:"-"`
+	cancelDownload  context.CancelFunc `json:"-"` // Cancel function for this download
 }
 
 // AddLog adds a log message to the download
@@ -395,9 +396,12 @@ func (p *NZBDownloaderPlugin) handleListDownloads(ctx context.Context, req *plug
 	p.downloadManager.mu.RLock()
 	defer p.downloadManager.mu.RUnlock()
 
-	downloads := make([]*Download, 0, len(p.downloadManager.downloads))
-	for _, dl := range p.downloadManager.downloads {
-		downloads = append(downloads, dl)
+	// Return downloads in queue order to maintain consistent ordering in UI
+	downloads := make([]*Download, 0, len(p.downloadManager.queue))
+	for _, id := range p.downloadManager.queue {
+		if dl, exists := p.downloadManager.downloads[id]; exists {
+			downloads = append(downloads, dl)
+		}
 	}
 
 	return jsonResponse(http.StatusOK, map[string]interface{}{"downloads": downloads})
@@ -505,6 +509,35 @@ func (p *NZBDownloaderPlugin) handleMoveDownloads(ctx context.Context, req *plug
 
 	default:
 		return jsonResponse(http.StatusBadRequest, map[string]string{"error": "Invalid direction"})
+	}
+
+	// After moving, check if the first queued item changed
+	// If so, pause any active downloads and restart the queue
+	var firstQueuedID string
+	for _, id := range p.downloadManager.queue {
+		dl := p.downloadManager.downloads[id]
+		if dl.Status == "queued" || dl.Status == "downloading" {
+			firstQueuedID = id
+			break
+		}
+	}
+
+	// If there's an active download and it's not the first in queue, cancel it
+	for activeID := range p.downloadManager.active {
+		if activeID != firstQueuedID {
+			dl := p.downloadManager.downloads[activeID]
+
+			// Cancel the download
+			if dl.cancelDownload != nil {
+				dl.AddLog("Download paused due to queue reordering")
+				dl.cancelDownload()
+			}
+
+			// Reset status to queued
+			dl.Status = "queued"
+			dl.StartedAt = nil
+			delete(p.downloadManager.active, activeID)
+		}
 	}
 
 	return jsonResponse(http.StatusOK, map[string]string{"message": "Downloads moved successfully"})
@@ -754,10 +787,14 @@ func (p *NZBDownloaderPlugin) processDownloadQueue(ctx context.Context) {
 			now := time.Now()
 			download.StartedAt = &now
 
+			// Create a cancellable context for this download
+			downloadCtx, downloadCancel := context.WithCancel(context.Background())
+			download.cancelDownload = downloadCancel
+
 			p.downloadManager.mu.Unlock()
 
 			// Download in background (servers and config are in Download struct)
-			go p.downloadNZB(ctx, download)
+			go p.downloadNZB(downloadCtx, download)
 		}
 	}
 }
@@ -809,15 +846,30 @@ func (p *NZBDownloaderPlugin) downloadNZB(ctx context.Context, download *Downloa
 	if err := downloader.Download(download, downloadDirStr); err != nil {
 		download.Status = "failed"
 		download.Error = fmt.Sprintf("Download failed: %v", err)
+		// Clean up failed download files
+		p.cleanupFailedDownload(downloadDirStr, download)
 		return
 	}
 
-	download.Status = "completed"
-	now := time.Now()
-	download.CompletedAt = &now
+	// Mark as processing - this allows next download to start
+	download.Status = "processing"
 	download.Progress = 100
+	download.AddLog("Download complete, processing files...")
 
-	download.AddLog("Download completed successfully")
+	// Run post-processing in background (doesn't block queue)
+	// Note: We don't defer anything here since processing happens after download completes
+	go func() {
+		// Post-process files (extraction, cleanup, etc.)
+		if err := downloader.PostProcess(downloadDirStr); err != nil {
+			download.AddLog(fmt.Sprintf("Post-processing encountered errors: %v", err))
+		}
+
+		// Mark as completed
+		download.Status = "completed"
+		now := time.Now()
+		download.CompletedAt = &now
+		download.AddLog("Processing completed successfully")
+	}()
 }
 
 // UIManifest returns the UI configuration for this plugin
@@ -842,6 +894,35 @@ func (p *NZBDownloaderPlugin) UIManifest(ctx context.Context) (*plugins.UIManife
 // HandleEvent handles system events
 func (p *NZBDownloaderPlugin) HandleEvent(ctx context.Context, evt plugins.Event) error {
 	return nil
+}
+
+// cleanupFailedDownload removes all files from a failed download
+func (p *NZBDownloaderPlugin) cleanupFailedDownload(downloadDir string, download *Download) {
+	download.AddLog("Cleaning up files from failed download...")
+
+	entries, err := os.ReadDir(downloadDir)
+	if err != nil {
+		download.AddLog(fmt.Sprintf("Failed to read download directory for cleanup: %v", err))
+		return
+	}
+
+	removedCount := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		filePath := filepath.Join(downloadDir, entry.Name())
+		if err := os.Remove(filePath); err != nil {
+			download.AddLog(fmt.Sprintf("Failed to remove %s: %v", entry.Name(), err))
+		} else {
+			removedCount++
+		}
+	}
+
+	if removedCount > 0 {
+		download.AddLog(fmt.Sprintf("Removed %d files from failed download", removedCount))
+	}
 }
 
 // Helper functions
@@ -941,7 +1022,7 @@ func jsonResponse(statusCode int, data interface{}) (*plugins.PluginHTTPResponse
 
 func main() {
 	nzbPlugin := &NZBDownloaderPlugin{
-		downloadManager: NewDownloadManager(3), // Max 3 concurrent downloads
+		downloadManager: NewDownloadManager(1), // Max 1 concurrent download (each uses many connections)
 	}
 
 	plugin.Serve(&plugin.ServeConfig{

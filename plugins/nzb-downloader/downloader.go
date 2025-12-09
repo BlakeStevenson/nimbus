@@ -378,12 +378,26 @@ func (fd *FastDownloader) Download(download *Download, downloadDir string) error
 	fd.download.AddLog(fmt.Sprintf("Downloaded %d segments in %.1fs (avg %.2f MB/s)",
 		totalSegments, totalTime, avgSpeed))
 
-	// Post-process: detect and extract RAR archives
-	if err := fd.postProcess(downloadedFiles, downloadDir); err != nil {
-		fd.download.AddLog(fmt.Sprintf("WARNING: Post-processing failed: %v", err))
+	return nil
+}
+
+// PostProcess handles post-download processing like file detection and extraction
+// This is called separately after download completes to allow next download to start
+func (fd *FastDownloader) PostProcess(downloadDir string) error {
+	// Get list of downloaded files
+	entries, err := os.ReadDir(downloadDir)
+	if err != nil {
+		return fmt.Errorf("failed to read download directory: %v", err)
 	}
 
-	return nil
+	files := make([]string, 0)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			files = append(files, filepath.Join(downloadDir, entry.Name()))
+		}
+	}
+
+	return fd.postProcess(files, downloadDir)
 }
 
 // postProcess handles post-download processing like file detection and extraction
@@ -582,6 +596,8 @@ func (fd *FastDownloader) postProcess(files []string, downloadDir string) error 
 
 	if firstArchive == "" {
 		fd.download.AddLog("No archives detected, files ready")
+		// Still clean up auxiliary files even without extraction
+		fd.cleanupAuxiliaryFiles(downloadDir)
 		return nil
 	}
 
@@ -615,13 +631,51 @@ func (fd *FastDownloader) postProcess(files []string, downloadDir string) error 
 
 	fd.download.AddLog("Extraction complete")
 
-	// Clean up archive files after successful extraction
-	fd.download.AddLog("Cleaning up archive files...")
+	// Clean up archive files and auxiliary files after successful extraction
+	fd.download.AddLog("Cleaning up archive and auxiliary files...")
 	for _, file := range renamedFiles {
 		os.Remove(file)
 	}
 
+	// Clean up auxiliary files
+	fd.cleanupAuxiliaryFiles(downloadDir)
+
 	return nil
+}
+
+// cleanupAuxiliaryFiles removes common auxiliary files (.nfo, .sfv, .bin, samples, etc.)
+func (fd *FastDownloader) cleanupAuxiliaryFiles(downloadDir string) {
+	entries, err := os.ReadDir(downloadDir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		filename := entry.Name()
+		ext := strings.ToLower(filepath.Ext(filename))
+
+		// Remove auxiliary files
+		shouldRemove := false
+		if ext == ".nfo" || ext == ".sfv" || ext == ".nzb" || ext == ".txt" {
+			shouldRemove = true
+		} else if strings.Contains(strings.ToLower(filename), "sample") {
+			shouldRemove = true
+		} else if strings.HasSuffix(filename, ".bin") {
+			// Remove .bin files that were likely temporary parts
+			shouldRemove = true
+		}
+
+		if shouldRemove {
+			fullPath := filepath.Join(downloadDir, filename)
+			if err := os.Remove(fullPath); err == nil {
+				fd.download.AddLog(fmt.Sprintf("Removed auxiliary file: %s", filename))
+			}
+		}
+	}
 }
 
 // Close closes the downloader and all connections
