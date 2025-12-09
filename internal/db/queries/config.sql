@@ -11,7 +11,10 @@ INSERT INTO config (key, value, metadata)
 VALUES ($1, $2, COALESCE($3, '{}'::jsonb))
 ON CONFLICT (key) DO UPDATE
 SET value = EXCLUDED.value,
-    metadata = COALESCE(EXCLUDED.metadata, config.metadata),
+    metadata = CASE
+        WHEN $3 IS NULL THEN config.metadata
+        ELSE EXCLUDED.metadata
+    END,
     updated_at = NOW()
 RETURNING *;
 

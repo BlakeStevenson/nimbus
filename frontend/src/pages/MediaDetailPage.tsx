@@ -6,8 +6,11 @@ import {
   useMediaFiles,
   useDeleteMediaFile,
   useDeleteMediaItem,
+  useMediaList,
 } from "@/lib/api/media";
 import { MediaKindBadge } from "@/components/media/MediaKindBadge";
+import { MediaGrid } from "@/components/media/MediaGrid";
+import { MediaTable } from "@/components/media/MediaTable";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -36,6 +39,8 @@ import {
   X,
   File,
   HardDrive,
+  LayoutGrid,
+  Table,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
@@ -47,6 +52,7 @@ export function MediaDetailPage() {
   const [deleteConfirmed, setDeleteConfirmed] = useState(false);
   const [isFileDeleteOpen, setIsFileDeleteOpen] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [editData, setEditData] = useState({
     title: "",
     year: "",
@@ -55,6 +61,15 @@ export function MediaDetailPage() {
 
   const { data: media, isLoading, error } = useMediaItem(id!);
   const { data: files, isLoading: filesLoading } = useMediaFiles(id!);
+  const { data: children, isLoading: childrenLoading } = useMediaList(
+    id ? { parentId: Number(id) } : {},
+  );
+  const { data: parentMedia } = useMediaItem(
+    media?.parent_id ? String(media.parent_id) : "",
+  );
+  const { data: grandparentMedia } = useMediaItem(
+    parentMedia?.parent_id ? String(parentMedia.parent_id) : "",
+  );
   const updateMedia = useUpdateMedia(id!);
   const deleteFile = useDeleteMediaFile();
   const deleteMediaItem = useDeleteMediaItem();
@@ -200,14 +215,120 @@ export function MediaDetailPage() {
       </div>
 
       <div className="space-y-2">
-        <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold">{media.title}</h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            {/* For seasons, show series name */}
+            {media.kind === "tv_season" && parentMedia && (
+              <>
+                <button
+                  onClick={() => navigate(`/media/${parentMedia.id}`)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {parentMedia.title}
+                </button>
+                <span className="text-muted-foreground">/</span>
+              </>
+            )}
+            {/* For episodes, show series name and season */}
+            {media.kind === "tv_episode" && grandparentMedia && parentMedia && (
+              <>
+                <button
+                  onClick={() => navigate(`/media/${grandparentMedia.id}`)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {grandparentMedia.title}
+                </button>
+                <span className="text-muted-foreground">/</span>
+                <button
+                  onClick={() => navigate(`/media/${parentMedia.id}`)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {parentMedia.title}
+                </button>
+                <span className="text-muted-foreground">/</span>
+              </>
+            )}
+            <span>
+              {media.kind === "tv_episode" &&
+                media.metadata &&
+                typeof media.metadata === "object" &&
+                (media.metadata as Record<string, unknown>).episode && (
+                  <span className="text-muted-foreground">
+                    E{(media.metadata as Record<string, unknown>).episode}{" "}
+                  </span>
+                )}
+              {media.title}
+            </span>
+          </h1>
           <MediaKindBadge kind={media.kind} />
         </div>
         {media.year && (
           <p className="text-lg text-muted-foreground">{media.year}</p>
         )}
       </div>
+
+      {/* Children Section */}
+      {(childrenLoading ||
+        (children && children.items && children.items.length > 0)) && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>
+                  {media.kind === "tv_series"
+                    ? "Seasons"
+                    : media.kind === "tv_season"
+                      ? "Episodes"
+                      : media.kind === "music_artist"
+                        ? "Albums"
+                        : media.kind === "music_album"
+                          ? "Tracks"
+                          : "Children"}
+                </CardTitle>
+                {children && (
+                  <CardDescription>
+                    {children.total} {children.total === 1 ? "item" : "items"}
+                  </CardDescription>
+                )}
+              </div>
+              {children && children.items && children.items.length > 0 && (
+                <div className="flex gap-2">
+                  <Button
+                    variant={viewMode === "grid" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setViewMode("grid")}
+                  >
+                    <LayoutGrid className="h-4 w-4 mr-2" />
+                    Grid
+                  </Button>
+                  <Button
+                    variant={viewMode === "table" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setViewMode("table")}
+                  >
+                    <Table className="h-4 w-4 mr-2" />
+                    Table
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {childrenLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : children && children.items && children.items.length > 0 ? (
+              <>
+                {viewMode === "grid" && <MediaGrid items={children.items} />}
+                {viewMode === "table" && <MediaTable items={children.items} />}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No children found</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
@@ -223,18 +344,6 @@ export function MediaDetailPage() {
               <Label className="text-muted-foreground">Sort Title</Label>
               <p>{media.sort_title}</p>
             </div>
-            {media.parent_id && (
-              <div>
-                <Label className="text-muted-foreground">Parent</Label>
-                <Button
-                  variant="link"
-                  className="h-auto p-0"
-                  onClick={() => navigate(`/media/${media.parent_id}`)}
-                >
-                  View Parent
-                </Button>
-              </div>
-            )}
             <div>
               <Label className="text-muted-foreground">Created</Label>
               <p className="text-sm">{formatDate(media.created_at)}</p>

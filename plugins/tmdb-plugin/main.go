@@ -66,9 +66,21 @@ func (p *TMDBPlugin) APIRoutes(ctx context.Context) ([]plugins.RouteDescriptor, 
 			Tag:    "",
 		},
 		{
+			Method: "GET",
+			Path:   "/api/plugins/tmdb/tv/{id}/season/{season}/episode/{episode}",
+			Auth:   "session",
+			Tag:    "",
+		},
+		{
 			Method: "POST",
 			Path:   "/api/plugins/tmdb/enrich/{mediaId}",
 			Auth:   "session",
+			Tag:    "",
+		},
+		{
+			Method: "POST",
+			Path:   "/api/plugins/tmdb/enrich",
+			Auth:   "none", // Allow internal scanner calls without auth
 			Tag:    "",
 		},
 	}, nil
@@ -108,10 +120,14 @@ func (p *TMDBPlugin) HandleAPI(ctx context.Context, req *plugins.PluginHTTPReque
 		return p.handleSearchMovie(ctx, req, apiKey)
 	case req.Path == "/api/plugins/tmdb/search/tv":
 		return p.handleSearchTV(ctx, req, apiKey)
+	case strings.Contains(req.Path, "/season/") && strings.Contains(req.Path, "/episode/"):
+		return p.handleGetEpisode(ctx, req, apiKey)
 	case strings.HasPrefix(req.Path, "/api/plugins/tmdb/movie/"):
 		return p.handleGetMovie(ctx, req, apiKey)
 	case strings.HasPrefix(req.Path, "/api/plugins/tmdb/tv/"):
 		return p.handleGetTV(ctx, req, apiKey)
+	case req.Path == "/api/plugins/tmdb/enrich":
+		return p.handleEnrichMediaBatch(ctx, req, apiKey)
 	case strings.HasPrefix(req.Path, "/api/plugins/tmdb/enrich/"):
 		return p.handleEnrichMedia(ctx, req, apiKey)
 	default:
@@ -206,6 +222,33 @@ func (p *TMDBPlugin) handleGetTV(ctx context.Context, req *plugins.PluginHTTPReq
 	data, err := p.makeRequest(ctx, apiURL)
 	if err != nil {
 		return p.errorResponse(http.StatusInternalServerError, fmt.Sprintf("Failed to get TV show: %v", err))
+	}
+
+	return &plugins.PluginHTTPResponse{
+		StatusCode: http.StatusOK,
+		Headers:    map[string][]string{"Content-Type": {"application/json"}},
+		Body:       data,
+	}, nil
+}
+
+// handleGetEpisode gets detailed episode information
+func (p *TMDBPlugin) handleGetEpisode(ctx context.Context, req *plugins.PluginHTTPRequest, apiKey string) (*plugins.PluginHTTPResponse, error) {
+	// Parse path: /api/plugins/tmdb/tv/{id}/season/{season}/episode/{episode}
+	parts := strings.Split(req.Path, "/")
+	if len(parts) < 10 {
+		return p.errorResponse(http.StatusBadRequest, "Invalid episode path")
+	}
+
+	tvID := parts[5]
+	season := parts[7]
+	episode := parts[9]
+
+	apiURL := fmt.Sprintf("%s/tv/%s/season/%s/episode/%s?api_key=%s&append_to_response=images",
+		tmdbAPIBaseURL, tvID, season, episode, apiKey)
+
+	data, err := p.makeRequest(ctx, apiURL)
+	if err != nil {
+		return p.errorResponse(http.StatusInternalServerError, fmt.Sprintf("Failed to get episode: %v", err))
 	}
 
 	return &plugins.PluginHTTPResponse{
@@ -319,6 +362,264 @@ func (p *TMDBPlugin) handleEnrichMedia(ctx context.Context, req *plugins.PluginH
 		Headers:    map[string][]string{"Content-Type": {"application/json"}},
 		Body:       body,
 	}, nil
+}
+
+// handleEnrichMediaBatch enriches media items with TMDB metadata (for scanner)
+func (p *TMDBPlugin) handleEnrichMediaBatch(ctx context.Context, req *plugins.PluginHTTPRequest, apiKey string) (*plugins.PluginHTTPResponse, error) {
+	// Parse request body
+	var reqBody struct {
+		Title   string `json:"title"`
+		Year    int    `json:"year,omitempty"`
+		Kind    string `json:"kind"` // "movie" or "tv_episode"
+		Season  int    `json:"season,omitempty"`
+		Episode int    `json:"episode,omitempty"`
+	}
+
+	if err := json.Unmarshal(req.Body, &reqBody); err != nil {
+		return p.errorResponse(http.StatusBadRequest, "Invalid request body")
+	}
+
+	if reqBody.Title == "" || reqBody.Kind == "" {
+		return p.errorResponse(http.StatusBadRequest, "title and kind are required")
+	}
+
+	metadata := make(map[string]interface{})
+
+	// Handle movies
+	if reqBody.Kind == "movie" {
+		// Search for the movie
+		searchURL := fmt.Sprintf("%s/search/movie?api_key=%s&query=%s",
+			tmdbAPIBaseURL, apiKey, url.QueryEscape(reqBody.Title))
+		if reqBody.Year > 0 {
+			searchURL += fmt.Sprintf("&year=%d", reqBody.Year)
+		}
+
+		searchData, err := p.makeRequest(ctx, searchURL)
+		if err != nil {
+			return p.errorResponse(http.StatusInternalServerError, fmt.Sprintf("Failed to search movie: %v", err))
+		}
+
+		var searchResult map[string]interface{}
+		if err := json.Unmarshal(searchData, &searchResult); err != nil {
+			return p.errorResponse(http.StatusInternalServerError, "Failed to parse search results")
+		}
+
+		results, ok := searchResult["results"].([]interface{})
+		if !ok || len(results) == 0 {
+			return p.errorResponse(http.StatusNotFound, "No results found")
+		}
+
+		// Get first result
+		firstResult := results[0].(map[string]interface{})
+		tmdbID := fmt.Sprintf("%.0f", firstResult["id"].(float64))
+
+		// Fetch full movie details
+		movieURL := fmt.Sprintf("%s/movie/%s?api_key=%s&append_to_response=credits,images",
+			tmdbAPIBaseURL, tmdbID, apiKey)
+		movieData, err := p.makeRequest(ctx, movieURL)
+		if err != nil {
+			return p.errorResponse(http.StatusInternalServerError, "Failed to fetch movie details")
+		}
+
+		var movieDetails map[string]interface{}
+		if err := json.Unmarshal(movieData, &movieDetails); err != nil {
+			return p.errorResponse(http.StatusInternalServerError, "Failed to parse movie details")
+		}
+
+		metadata = extractMetadata(movieDetails, "movie", tmdbID)
+	}
+
+	// Handle TV series
+	if reqBody.Kind == "tv_series" {
+		// Search for the TV show
+		searchURL := fmt.Sprintf("%s/search/tv?api_key=%s&query=%s",
+			tmdbAPIBaseURL, apiKey, url.QueryEscape(reqBody.Title))
+
+		searchData, err := p.makeRequest(ctx, searchURL)
+		if err != nil {
+			return p.errorResponse(http.StatusInternalServerError, fmt.Sprintf("Failed to search TV show: %v", err))
+		}
+
+		var searchResult map[string]interface{}
+		if err := json.Unmarshal(searchData, &searchResult); err != nil {
+			return p.errorResponse(http.StatusInternalServerError, "Failed to parse search results")
+		}
+
+		results, ok := searchResult["results"].([]interface{})
+		if !ok || len(results) == 0 {
+			return p.errorResponse(http.StatusNotFound, "No results found")
+		}
+
+		// Get first result
+		firstResult := results[0].(map[string]interface{})
+		tmdbID := fmt.Sprintf("%.0f", firstResult["id"].(float64))
+
+		// Fetch full TV series details
+		seriesURL := fmt.Sprintf("%s/tv/%s?api_key=%s&append_to_response=credits,images",
+			tmdbAPIBaseURL, tmdbID, apiKey)
+		seriesData, err := p.makeRequest(ctx, seriesURL)
+		if err != nil {
+			return p.errorResponse(http.StatusInternalServerError, "Failed to fetch series details")
+		}
+
+		var seriesDetails map[string]interface{}
+		if err := json.Unmarshal(seriesData, &seriesDetails); err != nil {
+			return p.errorResponse(http.StatusInternalServerError, "Failed to parse series details")
+		}
+
+		metadata = extractMetadata(seriesDetails, "tv_series", tmdbID)
+	}
+
+	// Handle TV seasons
+	if reqBody.Kind == "tv_season" {
+		// For seasons, we need the series title to search
+		searchURL := fmt.Sprintf("%s/search/tv?api_key=%s&query=%s",
+			tmdbAPIBaseURL, apiKey, url.QueryEscape(reqBody.Title))
+
+		searchData, err := p.makeRequest(ctx, searchURL)
+		if err != nil {
+			return p.errorResponse(http.StatusInternalServerError, fmt.Sprintf("Failed to search TV show: %v", err))
+		}
+
+		var searchResult map[string]interface{}
+		if err := json.Unmarshal(searchData, &searchResult); err != nil {
+			return p.errorResponse(http.StatusInternalServerError, "Failed to parse search results")
+		}
+
+		results, ok := searchResult["results"].([]interface{})
+		if !ok || len(results) == 0 {
+			return p.errorResponse(http.StatusNotFound, "No results found")
+		}
+
+		// Get first result
+		firstResult := results[0].(map[string]interface{})
+		tmdbID := fmt.Sprintf("%.0f", firstResult["id"].(float64))
+
+		// Fetch season details
+		seasonURL := fmt.Sprintf("%s/tv/%s/season/%d?api_key=%s&append_to_response=images",
+			tmdbAPIBaseURL, tmdbID, reqBody.Season, apiKey)
+		seasonData, err := p.makeRequest(ctx, seasonURL)
+		if err != nil {
+			return p.errorResponse(http.StatusInternalServerError, "Failed to fetch season details")
+		}
+
+		var seasonDetails map[string]interface{}
+		if err := json.Unmarshal(seasonData, &seasonDetails); err != nil {
+			return p.errorResponse(http.StatusInternalServerError, "Failed to parse season details")
+		}
+
+		metadata = extractMetadata(seasonDetails, "tv_season", tmdbID)
+	}
+
+	// Handle TV episodes
+	if reqBody.Kind == "tv_episode" {
+		// Search for the TV show
+		searchURL := fmt.Sprintf("%s/search/tv?api_key=%s&query=%s",
+			tmdbAPIBaseURL, apiKey, url.QueryEscape(reqBody.Title))
+
+		searchData, err := p.makeRequest(ctx, searchURL)
+		if err != nil {
+			return p.errorResponse(http.StatusInternalServerError, fmt.Sprintf("Failed to search TV show: %v", err))
+		}
+
+		var searchResult map[string]interface{}
+		if err := json.Unmarshal(searchData, &searchResult); err != nil {
+			return p.errorResponse(http.StatusInternalServerError, "Failed to parse search results")
+		}
+
+		results, ok := searchResult["results"].([]interface{})
+		if !ok || len(results) == 0 {
+			return p.errorResponse(http.StatusNotFound, "No results found")
+		}
+
+		// Get first result
+		firstResult := results[0].(map[string]interface{})
+		tmdbID := fmt.Sprintf("%.0f", firstResult["id"].(float64))
+
+		// Fetch episode details
+		episodeURL := fmt.Sprintf("%s/tv/%s/season/%d/episode/%d?api_key=%s&append_to_response=images",
+			tmdbAPIBaseURL, tmdbID, reqBody.Season, reqBody.Episode, apiKey)
+		episodeData, err := p.makeRequest(ctx, episodeURL)
+		if err != nil {
+			return p.errorResponse(http.StatusInternalServerError, "Failed to fetch episode details")
+		}
+
+		var episodeDetails map[string]interface{}
+		if err := json.Unmarshal(episodeData, &episodeDetails); err != nil {
+			return p.errorResponse(http.StatusInternalServerError, "Failed to parse episode details")
+		}
+
+		metadata = extractMetadata(episodeDetails, "tv_episode", tmdbID)
+	}
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"metadata": metadata,
+		"success":  true,
+	})
+
+	return &plugins.PluginHTTPResponse{
+		StatusCode: http.StatusOK,
+		Headers:    map[string][]string{"Content-Type": {"application/json"}},
+		Body:       body,
+	}, nil
+}
+
+// extractMetadata extracts relevant metadata from TMDB response
+func extractMetadata(tmdbData map[string]interface{}, mediaType string, tmdbID string) map[string]interface{} {
+	metadata := map[string]interface{}{
+		"tmdb_id": tmdbID,
+		"type":    mediaType,
+	}
+
+	if overview, ok := tmdbData["overview"].(string); ok && overview != "" {
+		metadata["description"] = overview
+	}
+
+	if voteAverage, ok := tmdbData["vote_average"].(float64); ok {
+		metadata["rating"] = voteAverage
+	}
+
+	if voteCount, ok := tmdbData["vote_count"].(float64); ok {
+		metadata["vote_count"] = voteCount
+	}
+
+	if posterPath, ok := tmdbData["poster_path"].(string); ok && posterPath != "" {
+		metadata["poster_url"] = tmdbImageBaseURL + posterPath
+	}
+
+	if stillPath, ok := tmdbData["still_path"].(string); ok && stillPath != "" {
+		metadata["still_url"] = tmdbImageBaseURL + stillPath
+	}
+
+	if backdropPath, ok := tmdbData["backdrop_path"].(string); ok && backdropPath != "" {
+		metadata["backdrop_url"] = tmdbImageBaseURL + backdropPath
+	}
+
+	if releaseDate, ok := tmdbData["release_date"].(string); ok {
+		metadata["release_date"] = releaseDate
+	}
+
+	if firstAirDate, ok := tmdbData["first_air_date"].(string); ok {
+		metadata["first_air_date"] = firstAirDate
+	}
+
+	if airDate, ok := tmdbData["air_date"].(string); ok {
+		metadata["air_date"] = airDate
+	}
+
+	if genres, ok := tmdbData["genres"].([]interface{}); ok {
+		metadata["genres"] = genres
+	}
+
+	if runtime, ok := tmdbData["runtime"].(float64); ok {
+		metadata["runtime"] = int(runtime)
+	}
+
+	if name, ok := tmdbData["name"].(string); ok {
+		metadata["episode_name"] = name
+	}
+
+	return metadata
 }
 
 // UIManifest returns the UI configuration for this plugin

@@ -1,10 +1,14 @@
 package library
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/blakestevenson/nimbus/internal/db/generated"
 	"github.com/blakestevenson/nimbus/internal/media"
@@ -27,15 +31,19 @@ import (
 // =============================================================================
 
 type Service struct {
-	queries *generated.Queries
-	logger  *zap.Logger
+	queries     *generated.Queries
+	logger      *zap.Logger
+	tmdbBaseURL string
+	enableTMDB  bool
 }
 
 // NewService creates a new scanner service
 func NewService(queries *generated.Queries, logger *zap.Logger) *Service {
 	return &Service{
-		queries: queries,
-		logger:  logger,
+		queries:     queries,
+		logger:      logger,
+		tmdbBaseURL: "http://localhost:8080/api/plugins/tmdb/enrich",
+		enableTMDB:  true, // Can be configured later
 	}
 }
 
@@ -92,6 +100,9 @@ func (s *Service) UpsertMovie(ctx context.Context, parsed *ParsedMedia, filePath
 		return item.ID, created, fmt.Errorf("failed to upsert media file: %w", err)
 	}
 
+	// Enrich with TMDB metadata (best effort, don't fail on errors)
+	go s.enrichWithTMDB(context.Background(), item.ID, parsed)
+
 	return item.ID, created, nil
 }
 
@@ -121,19 +132,26 @@ func (s *Service) UpsertTVEpisode(ctx context.Context, parsed *ParsedMedia, file
 	}
 
 	// Step 2: Ensure TV season exists
-	seasonID, err := s.ensureTVSeason(ctx, seriesID, parsed.Season)
+	seasonID, err := s.ensureTVSeason(ctx, seriesID, parsed.Season, parsed.Title)
 	if err != nil {
 		return 0, false, fmt.Errorf("failed to ensure TV season: %w", err)
 	}
 
 	// Step 3: Upsert the episode
-	episodeTitle := fmt.Sprintf("S%02dE%02d", parsed.Season, parsed.Episode)
+	// Use episode title if available, otherwise fall back to S01E02 format
+	episodeTitle := parsed.EpisodeTitle
+	if episodeTitle == "" {
+		episodeTitle = fmt.Sprintf("S%02dE%02d", parsed.Season, parsed.Episode)
+	}
 	sortTitle := episodeTitle
 
 	metadata := map[string]interface{}{
 		"source":  "scanner",
 		"season":  parsed.Season,
 		"episode": parsed.Episode,
+	}
+	if parsed.EpisodeTitle != "" {
+		metadata["episode_title"] = parsed.EpisodeTitle
 	}
 	metadataJSON, _ := json.Marshal(metadata)
 
@@ -161,6 +179,9 @@ func (s *Service) UpsertTVEpisode(ctx context.Context, parsed *ParsedMedia, file
 	if err := s.upsertMediaFile(ctx, item.ID, filePath, fileSize); err != nil {
 		return item.ID, created, fmt.Errorf("failed to upsert media file: %w", err)
 	}
+
+	// Enrich with TMDB metadata (best effort, don't fail on errors)
+	go s.enrichWithTMDB(context.Background(), item.ID, parsed)
 
 	return item.ID, created, nil
 }
@@ -304,10 +325,18 @@ func (s *Service) ensureTVSeries(ctx context.Context, title string, year int) (i
 		return 0, err
 	}
 
+	// Enrich with TMDB metadata (best effort, don't fail on errors)
+	parsed := &ParsedMedia{
+		Kind:  "tv_series",
+		Title: title,
+		Year:  year,
+	}
+	go s.enrichWithTMDB(context.Background(), item.ID, parsed)
+
 	return item.ID, nil
 }
 
-func (s *Service) ensureTVSeason(ctx context.Context, seriesID int64, seasonNumber int) (int64, error) {
+func (s *Service) ensureTVSeason(ctx context.Context, seriesID int64, seasonNumber int, seriesTitle string) (int64, error) {
 	seasonTitle := fmt.Sprintf("Season %d", seasonNumber)
 
 	metadata := map[string]interface{}{
@@ -328,6 +357,14 @@ func (s *Service) ensureTVSeason(ctx context.Context, seriesID int64, seasonNumb
 	if err != nil {
 		return 0, err
 	}
+
+	// Enrich with TMDB metadata (best effort, don't fail on errors)
+	parsed := &ParsedMedia{
+		Kind:   "tv_season",
+		Title:  seriesTitle, // Use series title for TMDB search
+		Season: seasonNumber,
+	}
+	go s.enrichWithTMDB(context.Background(), item.ID, parsed)
 
 	// Create series -> season relation
 	if err := s.upsertMediaRelation(ctx, seriesID, item.ID, "series-season", float64(seasonNumber)); err != nil {
@@ -462,4 +499,128 @@ func generateSortTitle(title string) string {
 	}
 
 	return title
+}
+
+// =============================================================================
+// enrichWithTMDB - Fetch and store TMDB metadata for a media item
+// =============================================================================
+// This method calls the TMDB plugin to fetch metadata and updates the media
+// item's metadata column with poster URLs, descriptions, ratings, etc.
+//
+// Note: This is a best-effort operation. Failures are logged but don't fail
+// the overall scan.
+// =============================================================================
+
+func (s *Service) enrichWithTMDB(ctx context.Context, itemID int64, parsed *ParsedMedia) {
+	if !s.enableTMDB {
+		return
+	}
+
+	// Build request payload
+	payload := map[string]interface{}{
+		"title": parsed.Title,
+		"kind":  parsed.Kind,
+	}
+
+	if parsed.Year > 0 {
+		payload["year"] = parsed.Year
+	}
+
+	if parsed.Kind == "tv_season" {
+		payload["season"] = parsed.Season
+	}
+
+	if parsed.Kind == "tv_episode" {
+		payload["season"] = parsed.Season
+		payload["episode"] = parsed.Episode
+	}
+
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		s.logger.Warn("Failed to marshal TMDB request", zap.Error(err))
+		return
+	}
+
+	// Make HTTP request to TMDB plugin
+	req, err := http.NewRequestWithContext(ctx, "POST", s.tmdbBaseURL, bytes.NewReader(payloadJSON))
+	if err != nil {
+		s.logger.Warn("Failed to create TMDB request", zap.Error(err))
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		s.logger.Warn("Failed to call TMDB plugin", zap.Error(err))
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		s.logger.Warn("TMDB plugin returned error",
+			zap.Int("status", resp.StatusCode),
+			zap.String("body", string(body)))
+		return
+	}
+
+	// Parse response
+	var tmdbResp struct {
+		Metadata map[string]interface{} `json:"metadata"`
+		Success  bool                   `json:"success"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&tmdbResp); err != nil {
+		s.logger.Warn("Failed to decode TMDB response", zap.Error(err))
+		return
+	}
+
+	if !tmdbResp.Success || len(tmdbResp.Metadata) == 0 {
+		s.logger.Debug("No TMDB metadata returned", zap.Int64("item_id", itemID))
+		return
+	}
+
+	// Update media item with TMDB metadata
+	metadataJSON, err := json.Marshal(tmdbResp.Metadata)
+	if err != nil {
+		s.logger.Warn("Failed to marshal TMDB metadata", zap.Error(err))
+		return
+	}
+
+	// Merge with existing metadata using JSONB concat operator
+	_, err = s.queries.UpdateMediaMetadata(ctx, generated.UpdateMediaMetadataParams{
+		ID:       itemID,
+		Metadata: metadataJSON,
+	})
+
+	if err != nil {
+		s.logger.Warn("Failed to update media metadata",
+			zap.Int64("item_id", itemID),
+			zap.Error(err))
+		return
+	}
+
+	// Update external_ids with TMDB ID if available
+	if tmdbID, ok := tmdbResp.Metadata["tmdb_id"].(string); ok && tmdbID != "" {
+		externalIDs := map[string]interface{}{
+			"tmdb": tmdbID,
+		}
+		externalIDsJSON, err := json.Marshal(externalIDs)
+		if err == nil {
+			_, err = s.queries.UpdateMediaExternalIDs(ctx, generated.UpdateMediaExternalIDsParams{
+				ID:          itemID,
+				ExternalIds: externalIDsJSON,
+			})
+			if err != nil {
+				s.logger.Warn("Failed to update external IDs",
+					zap.Int64("item_id", itemID),
+					zap.Error(err))
+			}
+		}
+	}
+
+	s.logger.Debug("Successfully enriched media with TMDB data",
+		zap.Int64("item_id", itemID),
+		zap.String("title", parsed.Title))
 }

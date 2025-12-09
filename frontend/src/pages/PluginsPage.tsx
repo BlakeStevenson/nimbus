@@ -51,7 +51,8 @@ export function PluginsPage() {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>
-            Failed to load plugins. Please try again later.
+            Failed to load plugins. If you just enabled plugins, restart the
+            server.
           </AlertDescription>
         </Alert>
       )}

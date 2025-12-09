@@ -12,7 +12,8 @@ export function useMediaList(filters: MediaFilters = {}) {
 
   if (filters.kind) params.append("kind", filters.kind);
   if (filters.q) params.append("q", filters.q);
-  if (filters.parentId) params.append("parent_id", String(filters.parentId));
+  if (filters.parentId !== undefined)
+    params.append("parent_id", String(filters.parentId));
   if (filters.limit) params.append("limit", String(filters.limit));
   if (filters.offset) params.append("offset", String(filters.offset));
 

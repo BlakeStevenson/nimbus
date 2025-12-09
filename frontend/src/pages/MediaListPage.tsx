@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMediaList } from "@/lib/api/media";
 import { MediaTable } from "@/components/media/MediaTable";
+import { MediaGrid } from "@/components/media/MediaGrid";
 import {
   Card,
   CardContent,
@@ -11,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -18,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, LayoutGrid, Table } from "lucide-react";
 import type { MediaFilters } from "@/lib/types";
 
 interface MediaListPageProps {
@@ -34,7 +36,8 @@ export function MediaListPage({
 }: MediaListPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchInput, setSearchInput] = useState(searchParams.get("q") || "");
-  const debounceTimerRef = useRef<NodeJS.Timeout>();
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Build filters from URL params and props
   const filters: MediaFilters = {
@@ -50,7 +53,7 @@ export function MediaListPage({
     if (qFromUrl !== searchInput) {
       setSearchInput(qFromUrl);
     }
-  }, [searchParams]);
+  }, [searchParams, searchInput]);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -119,8 +122,6 @@ export function MediaListPage({
                   <SelectItem value="all">All Types</SelectItem>
                   <SelectItem value="movie">Movies</SelectItem>
                   <SelectItem value="tv_series">TV Series</SelectItem>
-                  <SelectItem value="tv_season">TV Seasons</SelectItem>
-                  <SelectItem value="tv_episode">TV Episodes</SelectItem>
                   <SelectItem value="music_artist">Artists</SelectItem>
                   <SelectItem value="music_album">Albums</SelectItem>
                   <SelectItem value="music_track">Tracks</SelectItem>
@@ -145,12 +146,34 @@ export function MediaListPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Results</CardTitle>
-          <CardDescription>
-            {data
-              ? `${data.total} ${data.total === 1 ? "item" : "items"} found`
-              : "Loading..."}
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Results</CardTitle>
+              <CardDescription>
+                {data
+                  ? `${data.total} ${data.total === 1 ? "item" : "items"} found`
+                  : "Loading..."}
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant={viewMode === "grid" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("grid")}
+              >
+                <LayoutGrid className="h-4 w-4 mr-2" />
+                Grid
+              </Button>
+              <Button
+                variant={viewMode === "table" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("table")}
+              >
+                <Table className="h-4 w-4 mr-2" />
+                Table
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {error && (
@@ -165,7 +188,8 @@ export function MediaListPage({
             </div>
           )}
 
-          {data && <MediaTable items={data.items} />}
+          {data && viewMode === "grid" && <MediaGrid items={data.items} />}
+          {data && viewMode === "table" && <MediaTable items={data.items} />}
         </CardContent>
       </Card>
     </div>

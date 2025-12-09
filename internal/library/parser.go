@@ -23,15 +23,16 @@ import (
 // =============================================================================
 
 type ParsedMedia struct {
-	Kind    string // "movie", "tv_episode", "music_track", "book", etc.
-	Title   string // Main title (movie name, show name, track name, book title)
-	Year    int    // Release year (primarily for movies)
-	Season  int    // TV season number
-	Episode int    // TV episode number
-	Artist  string // Music artist name
-	Album   string // Music album name
-	Track   int    // Music track number
-	Author  string // Book author
+	Kind         string // "movie", "tv_episode", "music_track", "book", etc.
+	Title        string // Main title (movie name, show name, track name, book title)
+	Year         int    // Release year (primarily for movies)
+	Season       int    // TV season number
+	Episode      int    // TV episode number
+	EpisodeTitle string // TV episode title (e.g., "Crash Course" in "The Rookie - S01E02 - Crash Course")
+	Artist       string // Music artist name
+	Album        string // Music album name
+	Track        int    // Music track number
+	Author       string // Book author
 }
 
 // =============================================================================
@@ -81,7 +82,7 @@ var (
 	// Words to strip from titles for cleaner matching
 	stripWords = []string{
 		"1080p", "720p", "480p", "2160p", "4k", "bluray", "brrip",
-		"webrip", "web-dl", "hdtv", "dvdrip", "xvid", "x264", "x265",
+		"webrip", "web-dl", "webdl", "hdtv", "dvdrip", "xvid", "x264", "x265",
 		"hevc", "h264", "h265", "aac", "ac3", "dts", "proper", "repack",
 		"extended", "unrated", "directors.cut", "limited", "internal",
 	}
@@ -182,6 +183,8 @@ func parseMovie(filename string) *ParsedMedia {
 // =============================================================================
 
 func parseTVEpisode(filename, dir string) *ParsedMedia {
+	// Keep original filename for episode title extraction (before cleaning)
+	original := filename
 	cleaned := cleanFilename(filename)
 
 	// Try different season/episode patterns
@@ -202,15 +205,25 @@ func parseTVEpisode(filename, dir string) *ParsedMedia {
 				Episode: episode,
 			}
 
-			// Show name is everything before the season/episode marker
-			episodeIndex := pattern.FindStringIndex(cleaned)
+			// Show name is everything before the season/episode marker (use original, not cleaned)
+			episodeIndex := pattern.FindStringIndex(original)
 			if episodeIndex != nil && episodeIndex[0] > 0 {
-				parsed.Title = normalizeTitle(cleaned[:episodeIndex[0]])
+				showName := original[:episodeIndex[0]]
+				// Remove trailing separators before normalizing
+				showName = strings.TrimRight(showName, " .-_")
+				parsed.Title = normalizeTitle(showName)
 			}
 
 			// If no title in filename, try to get it from parent directory
 			if parsed.Title == "" {
 				parsed.Title = getShowNameFromPath(dir)
+			}
+
+			// Extract episode title from original filename (after S01E02)
+			// Look for pattern: "Show - S01E02 - Episode Title" or "Show S01E02 Episode Title"
+			episodeTitle := extractEpisodeTitle(original, pattern)
+			if episodeTitle != "" {
+				parsed.EpisodeTitle = episodeTitle
 			}
 
 			return parsed
@@ -370,6 +383,65 @@ func extractSeasonFromPath(dir string) int {
 		return season
 	}
 	return 0
+}
+
+// extractEpisodeTitle extracts the episode title that appears after the season/episode pattern
+// Examples:
+//
+//	"The Rookie - S01E02 - Crash Course WEBDL-1080p" -> "Crash Course"
+//	"Show.S01E02.Episode.Title.720p" -> "Episode Title"
+//	"Show - 1x02 - Title Here" -> "Title Here"
+func extractEpisodeTitle(filename string, pattern *regexp.Regexp) string {
+	// Find where the season/episode pattern ends
+	episodeIndex := pattern.FindStringIndex(filename)
+	if episodeIndex == nil || episodeIndex[1] >= len(filename) {
+		return ""
+	}
+
+	// Get everything after the season/episode marker
+	afterEpisode := filename[episodeIndex[1]:]
+
+	// Remove leading separators (spaces, dots, dashes, underscores)
+	afterEpisode = strings.TrimLeft(afterEpisode, " .-_")
+
+	// If there's nothing left, return empty
+	if afterEpisode == "" {
+		return ""
+	}
+
+	// Try to find content between separators before quality tags
+	// Remove quality tags and everything after
+	cleaned := afterEpisode
+	lowerCleaned := strings.ToLower(cleaned)
+
+	// Find the earliest occurrence of any quality tag
+	earliestIdx := len(cleaned)
+	for _, word := range stripWords {
+		lowerWord := strings.ToLower(word)
+		if idx := strings.Index(lowerCleaned, lowerWord); idx != -1 && idx < earliestIdx {
+			earliestIdx = idx
+		}
+	}
+
+	// If we found a quality tag, cut there
+	if earliestIdx < len(cleaned) {
+		cleaned = cleaned[:earliestIdx]
+	}
+
+	// Remove trailing separators and spaces
+	cleaned = strings.TrimRight(cleaned, " .-_")
+
+	// If we have content after cleaning, check if it's just a file extension
+	if cleaned != "" {
+		// Don't return if it's just a file extension (3-4 chars like "mkv", "mp4", etc.)
+		lowerCleaned = strings.ToLower(cleaned)
+		if videoExtensions["."+lowerCleaned] || audioExtensions["."+lowerCleaned] || bookExtensions["."+lowerCleaned] {
+			return ""
+		}
+		return normalizeTitle(cleaned)
+	}
+
+	return ""
 }
 
 // IsSupportedMediaFile checks if the file extension is supported

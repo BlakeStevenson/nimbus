@@ -25,3 +25,17 @@ UPDATE config SET metadata = jsonb_build_object(
     'description', 'Current server version',
     'type', 'text'
 ) WHERE key = 'server.version';
+
+-- Add plugin configuration entries
+INSERT INTO config (key, value, metadata) VALUES
+    ('plugins.enabled', 'false', jsonb_build_object(
+        'title', 'Enable Plugins',
+        'description', 'Enable or disable the plugin system',
+        'type', 'boolean'
+    )),
+    ('plugins.directory', '"/var/lib/nimbus/plugins"', jsonb_build_object(
+        'title', 'Plugins Directory',
+        'description', 'Directory where plugins are stored',
+        'type', 'text'
+    ))
+ON CONFLICT (key) DO NOTHING;

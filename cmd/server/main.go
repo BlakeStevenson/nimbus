@@ -74,10 +74,15 @@ func main() {
 	// Initialize auth service
 	authService := auth.NewService(queries, jwtManager, passwordProvider, logger)
 
-	// Initialize plugin manager (disabled by default, can be enabled via env var)
+	// Initialize plugin manager (read settings from config)
 	var pluginManager interface{}
-	if os.Getenv("ENABLE_PLUGINS") == "true" {
-		pluginsDir := os.Getenv("PLUGINS_DIR")
+
+	// Check if plugins are enabled (fallback to env var for backward compatibility)
+	pluginsEnabled := configStore.GetBoolOrDefault(context.Background(), "plugins.enabled", os.Getenv("ENABLE_PLUGINS") == "true")
+
+	if pluginsEnabled {
+		// Get plugins directory (fallback to env var for backward compatibility)
+		pluginsDir := configStore.GetOrDefault(context.Background(), "plugins.directory", os.Getenv("PLUGINS_DIR"))
 		if pluginsDir == "" {
 			pluginsDir = "/var/lib/nimbus/plugins" // Default plugins directory
 		}

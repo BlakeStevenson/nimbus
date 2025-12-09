@@ -57,11 +57,12 @@ type UpdateMediaParams struct {
 
 // MediaFilter holds filter parameters for listing media items
 type MediaFilter struct {
-	Kind     *MediaKind `json:"kind,omitempty"`
-	Search   *string    `json:"search,omitempty"`
-	ParentID *int64     `json:"parent_id,omitempty"`
-	Limit    int32      `json:"limit"`
-	Offset   int32      `json:"offset"`
+	Kind         *MediaKind `json:"kind,omitempty"`
+	Search       *string    `json:"search,omitempty"`
+	ParentID     *int64     `json:"parent_id,omitempty"`
+	TopLevelOnly bool       `json:"top_level_only,omitempty"` // Exclude items with parents
+	Limit        int32      `json:"limit"`
+	Offset       int32      `json:"offset"`
 }
 
 // MediaList represents a paginated list of media items

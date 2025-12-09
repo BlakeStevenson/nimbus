@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePluginNavItems } from "@/lib/api/plugins";
 import { useAuth } from "@/contexts/AuthContext";
+import { useConfigValue } from "@/lib/api/config";
 
 interface NavItem {
   label: string;
@@ -25,17 +26,21 @@ interface NavItem {
 
 const coreNavItems: NavItem[] = [
   { label: "Dashboard", path: "/", icon: Home },
-  { label: "All Media", path: "/media", icon: Library, group: "Media" },
-  { label: "Movies", path: "/media/movies", icon: Film, group: "Media" },
-  { label: "TV Shows", path: "/media/tv", icon: Tv, group: "Media" },
-  { label: "Music", path: "/media/music", icon: Music, group: "Media" },
-  { label: "Books", path: "/media/books", icon: BookOpen, group: "Media" },
+  { label: "All", path: "/media", icon: Library, group: "Library" },
+  { label: "Movies", path: "/media/movies", icon: Film, group: "Library" },
+  { label: "TV Shows", path: "/media/tv", icon: Tv, group: "Library" },
+  { label: "Music", path: "/media/music", icon: Music, group: "Library" },
+  { label: "Books", path: "/media/books", icon: BookOpen, group: "Library" },
 ];
 
 export function Sidebar() {
   const location = useLocation();
   const pluginNavItems = usePluginNavItems();
   const { user } = useAuth();
+  const { data: pluginsEnabledConfig } = useConfigValue("plugins.enabled");
+
+  // Check if plugins are enabled
+  const pluginsEnabled = pluginsEnabledConfig?.value === true;
 
   const isActive = (path: string) => {
     if (path === "/") {
@@ -137,18 +142,20 @@ export function Sidebar() {
                   <Settings className="h-4 w-4" />
                   Configuration
                 </Link>
-                <Link
-                  to="/plugins"
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                    isActive("/plugins")
-                      ? "bg-secondary text-secondary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                  )}
-                >
-                  <Puzzle className="h-4 w-4" />
-                  Plugins
-                </Link>
+                {pluginsEnabled && (
+                  <Link
+                    to="/plugins"
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                      isActive("/plugins")
+                        ? "bg-secondary text-secondary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                    )}
+                  >
+                    <Puzzle className="h-4 w-4" />
+                    Plugins
+                  </Link>
+                )}
                 <Link
                   to="/users"
                   className={cn(

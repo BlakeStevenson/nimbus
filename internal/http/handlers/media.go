@@ -93,6 +93,10 @@ func (h *MediaHandler) ListMediaItems(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if topLevelOnlyStr := r.URL.Query().Get("top_level_only"); topLevelOnlyStr == "true" {
+		filter.TopLevelOnly = true
+	}
+
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if limit, err := strconv.ParseInt(limitStr, 10, 32); err == nil {
 			filter.Limit = int32(limit)

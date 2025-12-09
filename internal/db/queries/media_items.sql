@@ -6,7 +6,13 @@ WHERE id = $1;
 SELECT * FROM media_items
 WHERE
     (sqlc.narg('kind')::text IS NULL OR kind = sqlc.narg('kind'))
-    AND (sqlc.narg('parent_id')::bigint IS NULL OR parent_id = sqlc.narg('parent_id'))
+    AND (
+        -- If parent_id is explicitly provided, use it (even if it's NULL to find top-level items)
+        (sqlc.narg('parent_id')::bigint IS NOT NULL AND parent_id = sqlc.narg('parent_id'))
+        OR
+        -- Otherwise, apply top_level_only filter if set
+        (sqlc.narg('parent_id')::bigint IS NULL AND (NOT sqlc.narg('top_level_only')::boolean OR parent_id IS NULL))
+    )
     AND (
         sqlc.narg('search')::text IS NULL
         OR title ILIKE '%' || sqlc.narg('search') || '%'
@@ -20,7 +26,13 @@ OFFSET sqlc.narg('offset');
 SELECT COUNT(*) FROM media_items
 WHERE
     (sqlc.narg('kind')::text IS NULL OR kind = sqlc.narg('kind'))
-    AND (sqlc.narg('parent_id')::bigint IS NULL OR parent_id = sqlc.narg('parent_id'))
+    AND (
+        -- If parent_id is explicitly provided, use it (even if it's NULL to find top-level items)
+        (sqlc.narg('parent_id')::bigint IS NOT NULL AND parent_id = sqlc.narg('parent_id'))
+        OR
+        -- Otherwise, apply top_level_only filter if set
+        (sqlc.narg('parent_id')::bigint IS NULL AND (NOT sqlc.narg('top_level_only')::boolean OR parent_id IS NULL))
+    )
     AND (
         sqlc.narg('search')::text IS NULL
         OR title ILIKE '%' || sqlc.narg('search') || '%'
@@ -108,4 +120,20 @@ DO UPDATE SET
     external_ids = media_items.external_ids || EXCLUDED.external_ids,
     metadata = media_items.metadata || EXCLUDED.metadata,
     updated_at = NOW()
+RETURNING *;
+
+-- name: UpdateMediaMetadata :one
+UPDATE media_items
+SET
+    metadata = media_items.metadata || sqlc.arg('metadata')::jsonb,
+    updated_at = NOW()
+WHERE id = sqlc.arg('id')
+RETURNING *;
+
+-- name: UpdateMediaExternalIDs :one
+UPDATE media_items
+SET
+    external_ids = media_items.external_ids || sqlc.arg('external_ids')::jsonb,
+    updated_at = NOW()
+WHERE id = sqlc.arg('id')
 RETURNING *;
