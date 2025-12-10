@@ -158,7 +158,8 @@ export function MediaDetailPage() {
           ? files.some((f) => f.media_item_id === existingEpisode.id)
           : false;
       const isDownloading =
-        existingEpisode && downloadingMediaIds.has(existingEpisode.id);
+        existingEpisode &&
+        downloadingMediaIds.has(existingEpisode.id as number);
 
       return {
         episode_number: ep.episode_number,
@@ -779,7 +780,9 @@ export function MediaDetailPage() {
                           className="h-8 w-8 p-0"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSearchEpisodeId(episode.existingEpisode!.id);
+                            setSearchEpisodeId(
+                              episode.existingEpisode!.id as number,
+                            );
                             setSearchEpisodeTitle(episode.name);
                             setIsSearchOpen(true);
                           }}

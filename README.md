@@ -181,7 +181,7 @@ The frontend dev server runs on `http://localhost:5173` and proxies API requests
 
 ## Plugin Development
 
-Nimbus uses a plugin system to extend functionality. See the [Plugin Quick Start Guide](docs/PLUGIN_QUICKSTART.md) for detailed information.
+Nimbus uses a plugin system to extend functionality.
 
 ### Available Plugins
 
@@ -197,7 +197,6 @@ Nimbus uses a plugin system to extend functionality. See the [Plugin Quick Start
 3. Add a `manifest.json`
 4. Build with `./build.sh`
 
-See [Plugin Implementation Summary](docs/PLUGIN_IMPLEMENTATION_SUMMARY.md) for more details.
 
 ## Project Structure
 
@@ -225,7 +224,6 @@ nimbus/
 │       ├── components/  # React components
 │       ├── lib/         # API clients and utilities
 │       └── pages/       # Page components
-└── docs/                # Documentation
 ```
 
 ## API
