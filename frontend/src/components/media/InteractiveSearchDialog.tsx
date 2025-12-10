@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,14 +17,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Download,
   Loader2,
   Search,
   AlertCircle,
-  CheckCircle,
   X,
   ExternalLink,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { useInteractiveSearch, type IndexerRelease } from "@/lib/api/media";
 import { useCreateDownload, useDownloaders } from "@/lib/api/downloads";
@@ -40,6 +44,74 @@ interface InteractiveSearchDialogProps {
   onSelectRelease?: (release: IndexerRelease) => void;
 }
 
+type SortColumn = "title" | "size" | "age" | "indexer";
+type SortDirection = "asc" | "desc" | null;
+
+interface MultiSelectProps {
+  label: string;
+  options: string[];
+  selected: Set<string>;
+  onChange: (selected: Set<string>) => void;
+}
+
+function MultiSelect({ label, options, selected, onChange }: MultiSelectProps) {
+  const [open, setOpen] = useState(false);
+
+  const toggleOption = (option: string) => {
+    const newSelected = new Set(selected);
+    if (newSelected.has(option)) {
+      newSelected.delete(option);
+    } else {
+      newSelected.add(option);
+    }
+    onChange(newSelected);
+  };
+
+  const displayText =
+    selected.size === 0
+      ? label
+      : selected.size === options.length
+        ? `${label}: All`
+        : `${label}: ${selected.size}`;
+
+  return (
+    <div className="relative">
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-9 text-xs"
+        onClick={() => setOpen(!open)}
+      >
+        {displayText}
+      </Button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute top-full left-0 z-50 mt-1 w-48 rounded-md border bg-popover p-2 shadow-md">
+            <div className="space-y-2">
+              {options.map((option) => (
+                <div key={option} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`${label}-${option}`}
+                    checked={selected.has(option)}
+                    onCheckedChange={() => toggleOption(option)}
+                  />
+                  <label
+                    htmlFor={`${label}-${option}`}
+                    className="text-sm cursor-pointer"
+                  >
+                    {option}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function InteractiveSearchDialog({
   mediaId,
   mediaTitle,
@@ -52,6 +124,18 @@ export function InteractiveSearchDialog({
   const [downloadingReleases, setDownloadingReleases] = useState<Set<string>>(
     new Set(),
   );
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  const [selectedQualities, setSelectedQualities] = useState<Set<string>>(
+    new Set(),
+  );
+  const [selectedVideoCodecs, setSelectedVideoCodecs] = useState<Set<string>>(
+    new Set(),
+  );
+  const [selectedAudioCodecs, setSelectedAudioCodecs] = useState<Set<string>>(
+    new Set(),
+  );
+
   const { toast } = useToast();
 
   const {
@@ -89,25 +173,178 @@ export function InteractiveSearchDialog({
     if (lower.includes("1080p")) return "1080p";
     if (lower.includes("720p")) return "720p";
     if (lower.includes("480p")) return "480p";
-    return null;
+    return "Unknown";
+  };
+
+  const getVideoCodec = (title: string): string => {
+    const lower = title.toLowerCase();
+    if (
+      lower.includes("x265") ||
+      lower.includes("hevc") ||
+      lower.includes("h265")
+    )
+      return "x265";
+    if (
+      lower.includes("x264") ||
+      lower.includes("avc") ||
+      lower.includes("h264")
+    )
+      return "x264";
+    if (lower.includes("xvid")) return "XviD";
+    if (lower.includes("av1")) return "AV1";
+    return "Unknown";
+  };
+
+  const getAudioCodec = (title: string): string => {
+    const lower = title.toLowerCase();
+    if (lower.includes("atmos")) return "Atmos";
+    if (lower.includes("truehd")) return "TrueHD";
+    if (lower.includes("dts-hd") || lower.includes("dts.hd")) return "DTS-HD";
+    if (lower.includes("dts")) return "DTS";
+    if (
+      lower.includes("dd5.1") ||
+      lower.includes("dd+5.1") ||
+      lower.includes("ac3") ||
+      lower.includes("ddp5.1")
+    )
+      return "DD5.1";
+    if (lower.includes("aac")) return "AAC";
+    if (lower.includes("mp3")) return "MP3";
+    if (lower.includes("flac")) return "FLAC";
+    return "Unknown";
   };
 
   const getCodecInfo = (title: string) => {
-    const lower = title.toLowerCase();
     const codecs = [];
-    if (lower.includes("x265") || lower.includes("hevc")) codecs.push("x265");
-    else if (lower.includes("x264") || lower.includes("avc"))
-      codecs.push("x264");
-    if (lower.includes("dts")) codecs.push("DTS");
-    else if (lower.includes("ac3") || lower.includes("dd5.1"))
-      codecs.push("DD5.1");
+    const videoCodec = getVideoCodec(title);
+    const audioCodec = getAudioCodec(title);
+
+    if (videoCodec !== "Unknown") codecs.push(videoCodec);
+    if (audioCodec !== "Unknown") codecs.push(audioCodec);
+
     return codecs;
   };
 
-  const filteredReleases =
-    searchResults?.releases.filter((release) =>
+  // Extract unique values for filters
+  const filterOptions = useMemo(() => {
+    if (!searchResults?.releases) {
+      return {
+        qualities: [] as string[],
+        videoCodecs: [] as string[],
+        audioCodecs: [] as string[],
+      };
+    }
+
+    const qualities = new Set<string>();
+    const videoCodecs = new Set<string>();
+    const audioCodecs = new Set<string>();
+
+    searchResults.releases.forEach((release) => {
+      qualities.add(getQualityBadge(release.title));
+      videoCodecs.add(getVideoCodec(release.title));
+      audioCodecs.add(getAudioCodec(release.title));
+    });
+
+    return {
+      qualities: Array.from(qualities).sort(),
+      videoCodecs: Array.from(videoCodecs).sort(),
+      audioCodecs: Array.from(audioCodecs).sort(),
+    };
+  }, [searchResults]);
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      // Cycle through: asc -> desc -> null
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else if (sortDirection === "desc") {
+        setSortDirection(null);
+        setSortColumn(null);
+      }
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
+
+  const getSortIcon = (column: SortColumn) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="h-4 w-4 ml-1 inline" />;
+    }
+    if (sortDirection === "asc") {
+      return <ArrowUp className="h-4 w-4 ml-1 inline" />;
+    }
+    if (sortDirection === "desc") {
+      return <ArrowDown className="h-4 w-4 ml-1 inline" />;
+    }
+    return <ArrowUpDown className="h-4 w-4 ml-1 inline" />;
+  };
+
+  const filteredAndSortedReleases = useMemo(() => {
+    let releases = searchResults?.releases || [];
+
+    // Apply text filter
+    releases = releases.filter((release) =>
       release.title.toLowerCase().includes(searchFilter.toLowerCase()),
-    ) || [];
+    );
+
+    // Apply quality filter
+    if (selectedQualities.size > 0) {
+      releases = releases.filter((release) =>
+        selectedQualities.has(getQualityBadge(release.title)),
+      );
+    }
+
+    // Apply video codec filter
+    if (selectedVideoCodecs.size > 0) {
+      releases = releases.filter((release) =>
+        selectedVideoCodecs.has(getVideoCodec(release.title)),
+      );
+    }
+
+    // Apply audio codec filter
+    if (selectedAudioCodecs.size > 0) {
+      releases = releases.filter((release) =>
+        selectedAudioCodecs.has(getAudioCodec(release.title)),
+      );
+    }
+
+    // Apply sorting
+    if (sortColumn && sortDirection) {
+      releases = [...releases].sort((a, b) => {
+        let compareValue = 0;
+
+        switch (sortColumn) {
+          case "title":
+            compareValue = a.title.localeCompare(b.title);
+            break;
+          case "size":
+            compareValue = a.size - b.size;
+            break;
+          case "age":
+            compareValue =
+              new Date(a.publish_date).getTime() -
+              new Date(b.publish_date).getTime();
+            break;
+          case "indexer":
+            compareValue = a.indexer_name.localeCompare(b.indexer_name);
+            break;
+        }
+
+        return sortDirection === "asc" ? compareValue : -compareValue;
+      });
+    }
+
+    return releases;
+  }, [
+    searchResults,
+    searchFilter,
+    selectedQualities,
+    selectedVideoCodecs,
+    selectedAudioCodecs,
+    sortColumn,
+    sortDirection,
+  ]);
 
   const handleDownload = async (release: IndexerRelease) => {
     // Find an NZB downloader
@@ -152,6 +389,9 @@ export function InteractiveSearchDialog({
       if (onSelectRelease) {
         onSelectRelease(release);
       }
+
+      // Close the modal after successful download
+      onOpenChange(false);
     } catch (err) {
       toast({
         title: "Download failed",
@@ -184,16 +424,57 @@ export function InteractiveSearchDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center gap-2 mb-4">
-          <Input
-            placeholder="Filter releases..."
-            value={searchFilter}
-            onChange={(e) => setSearchFilter(e.target.value)}
-            className="flex-1"
-          />
-          <Badge variant="outline">
-            {filteredReleases.length} of {searchResults?.total || 0} releases
-          </Badge>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="Filter releases..."
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              className="flex-1"
+            />
+            <Badge variant="outline">
+              {filteredAndSortedReleases.length} of {searchResults?.total || 0}{" "}
+              releases
+            </Badge>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-muted-foreground">Filters:</span>
+            <MultiSelect
+              label="Quality"
+              options={filterOptions.qualities}
+              selected={selectedQualities}
+              onChange={setSelectedQualities}
+            />
+            <MultiSelect
+              label="Video Codec"
+              options={filterOptions.videoCodecs}
+              selected={selectedVideoCodecs}
+              onChange={setSelectedVideoCodecs}
+            />
+            <MultiSelect
+              label="Audio Codec"
+              options={filterOptions.audioCodecs}
+              selected={selectedAudioCodecs}
+              onChange={setSelectedAudioCodecs}
+            />
+            {(selectedQualities.size > 0 ||
+              selectedVideoCodecs.size > 0 ||
+              selectedAudioCodecs.size > 0) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 text-xs"
+                onClick={() => {
+                  setSelectedQualities(new Set());
+                  setSelectedVideoCodecs(new Set());
+                  setSelectedAudioCodecs(new Set());
+                }}
+              >
+                Clear filters
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-auto">
@@ -213,26 +494,46 @@ export function InteractiveSearchDialog({
             </div>
           )}
 
-          {!isLoading && !error && filteredReleases.length === 0 && (
+          {!isLoading && !error && filteredAndSortedReleases.length === 0 && (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <AlertCircle className="h-8 w-8 mr-2" />
               <span>No releases found</span>
             </div>
           )}
 
-          {!isLoading && !error && filteredReleases.length > 0 && (
+          {!isLoading && !error && filteredAndSortedReleases.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Release</TableHead>
-                  <TableHead>Size</TableHead>
-                  <TableHead>Age</TableHead>
-                  <TableHead>Indexer</TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none"
+                    onClick={() => handleSort("title")}
+                  >
+                    Release{getSortIcon("title")}
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none"
+                    onClick={() => handleSort("size")}
+                  >
+                    Size{getSortIcon("size")}
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none"
+                    onClick={() => handleSort("age")}
+                  >
+                    Age{getSortIcon("age")}
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none"
+                    onClick={() => handleSort("indexer")}
+                  >
+                    Indexer{getSortIcon("indexer")}
+                  </TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredReleases.map((release) => {
+                {filteredAndSortedReleases.map((release) => {
                   const quality = getQualityBadge(release.title);
                   const codecs = getCodecInfo(release.title);
                   const publishDate = new Date(release.publish_date);

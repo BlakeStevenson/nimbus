@@ -10,6 +10,7 @@ import {
   type IndexerRelease,
 } from "@/lib/api/media";
 import { useTVSeasonDetails } from "@/lib/api/tmdb";
+import { useDownloads } from "@/lib/api/downloads";
 import { MediaKindBadge } from "@/components/media/MediaKindBadge";
 import { MediaGrid } from "@/components/media/MediaGrid";
 import { MediaTable } from "@/components/media/MediaTable";
@@ -95,6 +96,7 @@ export function MediaDetailPage() {
   const { data: grandparentMedia } = useMediaItem(
     parentMedia?.parent_id ? String(parentMedia.parent_id) : "",
   );
+  const { data: downloadsData } = useDownloads();
   const updateMedia = useUpdateMedia(id!);
   const deleteFile = useDeleteMediaFile();
   const deleteMediaItem = useDeleteMediaItem();
@@ -131,12 +133,32 @@ export function MediaDetailPage() {
       }),
     );
 
+    // Create a set of media IDs that are currently being downloaded
+    // Convert to numbers for consistent comparison
+    const downloadingMediaIds = new Set(
+      (downloadsData?.downloads || [])
+        .filter(
+          (d) =>
+            d.status === "queued" ||
+            d.status === "downloading" ||
+            d.status === "processing",
+        )
+        .map((d) => {
+          const mediaId = d.metadata?.media_id;
+          if (mediaId === undefined || mediaId === null) return null;
+          return typeof mediaId === "number" ? mediaId : Number(mediaId);
+        })
+        .filter((id): id is number => id !== null && !isNaN(id)),
+    );
+
     return (tmdbSeasonData.episodes as any[]).map((ep: any) => {
       const existingEpisode = existingEpisodes.get(ep.episode_number);
       const hasFiles =
         existingEpisode && files
           ? files.some((f) => f.media_item_id === existingEpisode.id)
           : false;
+      const isDownloading =
+        existingEpisode && downloadingMediaIds.has(existingEpisode.id);
 
       return {
         episode_number: ep.episode_number,
@@ -148,13 +170,15 @@ export function MediaDetailPage() {
         vote_average: ep.vote_average,
         existingEpisode,
         status: existingEpisode
-          ? hasFiles
-            ? "available"
-            : "missing"
+          ? isDownloading
+            ? "downloading"
+            : hasFiles
+              ? "available"
+              : "missing"
           : "not_added",
       };
     });
-  }, [tmdbSeasonData, children, media, files]);
+  }, [tmdbSeasonData, children, media, files, downloadsData]);
 
   const handleEdit = () => {
     if (media) {
