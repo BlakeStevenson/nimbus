@@ -227,13 +227,6 @@ func (s *Service) SearchWithAuth(ctx context.Context, req SearchRequest, cookies
 		Sources:  sources,
 	}
 
-	// Debug: Add metadata about fallback
-	if len(pluginsNeedingFallback) > 0 && req.Type == "tv" && req.TVDBID != "" {
-		s.logger.Error("FALLBACK DEBUG",
-			zap.Int("plugins_needing_fallback", len(pluginsNeedingFallback)),
-			zap.String("had_tvdbid", "yes"))
-	}
-
 	return resp, nil
 }
 
@@ -314,14 +307,6 @@ func (s *Service) searchPluginViaHTTP(ctx context.Context, pluginID string, req 
 	if len(params) > 0 {
 		fullURL = fmt.Sprintf("%s?%s", endpoint, params.Encode())
 	}
-
-	// Log the search URL for debugging
-	s.logger.Info("Searching plugin via HTTP",
-		zap.String("plugin_id", pluginID),
-		zap.String("url", fullURL),
-		zap.String("tvdbid", req.TVDBID),
-		zap.Int("season", req.Season),
-		zap.Int("episode", req.Episode))
 
 	// Create HTTP request
 	httpReq, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)

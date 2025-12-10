@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 
 	"github.com/blakestevenson/nimbus/internal/db/generated"
@@ -60,10 +59,6 @@ func handleInteractiveSearch(w http.ResponseWriter, r *http.Request, indexerServ
 
 	// Build search request based on media kind and metadata
 	searchReq := buildSearchRequestFromMediaWithQueries(media, seriesTitle, queries, r.Context())
-
-	// Debug output to stderr
-	fmt.Fprintf(os.Stderr, "SEARCH DEBUG: mediaID=%d kind=%s tvdbid=%s season=%d episode=%d query=%s\n",
-		mediaID, media.Kind, searchReq.TVDBID, searchReq.Season, searchReq.Episode, searchReq.Query)
 
 	// Log the search request
 	logger.Info("Interactive search initiated",

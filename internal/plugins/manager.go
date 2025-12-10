@@ -354,9 +354,7 @@ func (pm *PluginManager) loadPlugin(ctx context.Context, id string) error {
 	// Check if plugin is an indexer
 	isIndexer := false
 	indexerCheck, err := pluginClient.IsIndexer(ctx)
-	if err != nil {
-		pm.logger.Debug("Plugin does not implement indexer interface", zap.String("plugin_id", id))
-	} else {
+	if err == nil {
 		isIndexer = indexerCheck
 	}
 
@@ -456,18 +454,9 @@ func (pm *PluginManager) RegisterRoutes(router interface{}, handlers *APIHandler
 	}
 
 	for id, lp := range pm.plugins {
-		pm.logger.Info("Registering plugin routes",
-			zap.String("plugin_id", id),
-			zap.Int("route_count", len(lp.Routes)))
-
 		for _, route := range lp.Routes {
 			handler := handlers.makePluginAPIHandler(lp, route)
 			chiRouter.Method(route.Method, route.Path, handler)
-
-			pm.logger.Debug("Registered plugin route",
-				zap.String("plugin_id", id),
-				zap.String("method", route.Method),
-				zap.String("path", route.Path))
 		}
 	}
 }

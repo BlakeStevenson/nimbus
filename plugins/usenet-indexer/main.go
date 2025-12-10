@@ -175,12 +175,6 @@ func (p *UsenetIndexerPlugin) handleListIndexers(ctx context.Context, req *plugi
 		indexers = []IndexerConfig{}
 	}
 
-	// DEBUG: Log raw indexer data
-	fmt.Fprintf(os.Stderr, "handleListIndexers: Retrieved %d indexers\n", len(indexers))
-	for i, idx := range indexers {
-		fmt.Fprintf(os.Stderr, "  Indexer %d: ID=%s, Name=%s, Enabled=%v\n", i, idx.ID, idx.Name, idx.Enabled)
-	}
-
 	// Mask API keys
 	for i := range indexers {
 		indexers[i].APIKey = maskAPIKey(indexers[i].APIKey)
@@ -372,7 +366,6 @@ func (p *UsenetIndexerPlugin) handleSearch(ctx context.Context, req *plugins.Plu
 
 	params := p.parseSearchParams(req.Query)
 
-	// Search across all enabled indexers in parallel
 	results, err := p.searchMultipleIndexers(ctx, indexers, params, func(client *NewznabClient, params SearchParams) ([]Release, error) {
 		return client.Search(params)
 	})
@@ -403,12 +396,7 @@ func (p *UsenetIndexerPlugin) handleSearchTV(ctx context.Context, req *plugins.P
 
 	params := p.parseSearchParams(req.Query)
 
-	// Search across all enabled indexers in parallel
 	results, err := p.searchMultipleIndexers(ctx, indexers, params, func(client *NewznabClient, params SearchParams) ([]Release, error) {
-		// Use indexer's TV categories if not specified in params
-		if len(params.Categories) == 0 {
-			// We'll set categories per-indexer in searchMultipleIndexers
-		}
 		return client.SearchTV(params)
 	})
 
@@ -438,12 +426,7 @@ func (p *UsenetIndexerPlugin) handleSearchMovie(ctx context.Context, req *plugin
 
 	params := p.parseSearchParams(req.Query)
 
-	// Search across all enabled indexers in parallel
 	results, err := p.searchMultipleIndexers(ctx, indexers, params, func(client *NewznabClient, params SearchParams) ([]Release, error) {
-		// Use indexer's movie categories if not specified in params
-		if len(params.Categories) == 0 {
-			// We'll set categories per-indexer in searchMultipleIndexers
-		}
 		return client.SearchMovie(params)
 	})
 
@@ -595,34 +578,12 @@ func (p *UsenetIndexerPlugin) getIndexers(ctx context.Context, sdk plugins.SDKIn
 	switch v := val.(type) {
 	case []interface{}:
 		jsonData, _ := json.Marshal(v)
-		if err := json.Unmarshal(jsonData, &indexers); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR unmarshaling []interface{}: %v, data: %s\n", err, string(jsonData))
-		} else {
-			fmt.Fprintf(os.Stderr, "SUCCESS: Parsed %d indexers from []interface{}\n", len(indexers))
-			for i, idx := range indexers {
-				fmt.Fprintf(os.Stderr, "  Indexer %d: %s, enabled=%v\n", i, idx.Name, idx.Enabled)
-			}
-		}
+		json.Unmarshal(jsonData, &indexers)
 	case string:
-		if err := json.Unmarshal([]byte(v), &indexers); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR unmarshaling string: %v, data: %s\n", err, v)
-		} else {
-			fmt.Fprintf(os.Stderr, "SUCCESS: Parsed %d indexers from string\n", len(indexers))
-			for i, idx := range indexers {
-				fmt.Fprintf(os.Stderr, "  Indexer %d: %s, enabled=%v\n", i, idx.Name, idx.Enabled)
-			}
-		}
+		json.Unmarshal([]byte(v), &indexers)
 	default:
-		fmt.Fprintf(os.Stderr, "WARNING: Unexpected type %T, value: %+v\n", v, v)
 		jsonData, _ := json.Marshal(v)
-		if err := json.Unmarshal(jsonData, &indexers); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR unmarshaling default: %v, data: %s\n", err, string(jsonData))
-		} else {
-			fmt.Fprintf(os.Stderr, "SUCCESS: Parsed %d indexers from default marshal\n", len(indexers))
-			for i, idx := range indexers {
-				fmt.Fprintf(os.Stderr, "  Indexer %d: %s, enabled=%v\n", i, idx.Name, idx.Enabled)
-			}
-		}
+		json.Unmarshal(jsonData, &indexers)
 	}
 
 	return indexers, nil
@@ -669,9 +630,7 @@ func (p *UsenetIndexerPlugin) searchMultipleIndexers(
 	resultChan := make(chan indexerResult, len(indexers))
 	var wg sync.WaitGroup
 
-	fmt.Fprintf(os.Stderr, "USENET PLUGIN: Searching %d indexers\n", len(indexers))
 	for _, indexer := range indexers {
-		fmt.Fprintf(os.Stderr, "USENET PLUGIN: Starting search for indexer: %s (%s)\n", indexer.Name, indexer.ID)
 		wg.Add(1)
 		go func(idx IndexerConfig) {
 			defer wg.Done()

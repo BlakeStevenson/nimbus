@@ -47,10 +47,8 @@ func NewRouter(
 	// Initialize indexer service if plugin manager is available
 	var indexerService *indexer.Service
 	if pluginManager != nil {
-		logger.Debug("Plugin manager provided to router")
 		if pm, ok := pluginManager.(*plugins.PluginManager); ok {
 			indexerService = indexer.NewService(pm, logger)
-			logger.Info("Indexer service initialized")
 		}
 	}
 

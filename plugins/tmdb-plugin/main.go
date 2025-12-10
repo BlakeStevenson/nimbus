@@ -101,19 +101,12 @@ func (p *TMDBPlugin) HandleAPI(ctx context.Context, req *plugins.PluginHTTPReque
 	if req.SDK != nil {
 		// Try to get from config table via SDK
 		apiKey, err = req.SDK.ConfigGetString(ctx, configKey)
-		if err != nil {
-			// Log error and fall back to environment variable
-			fmt.Fprintf(os.Stderr, "TMDB plugin: Failed to get config from SDK: %v\n", err)
+		if err != nil || apiKey == "" {
+			// Fall back to environment variable
 			apiKey = os.Getenv("TMDB_API_KEY")
-		} else if apiKey == "" {
-			fmt.Fprintf(os.Stderr, "TMDB plugin: Config key '%s' returned empty string\n", configKey)
-			apiKey = os.Getenv("TMDB_API_KEY")
-		} else {
-			fmt.Fprintf(os.Stderr, "TMDB plugin: Successfully got API key from SDK config (length: %d)\n", len(apiKey))
 		}
 	} else {
 		// No SDK available, use environment variable
-		fmt.Fprintf(os.Stderr, "TMDB plugin: No SDK available, using environment variable\n")
 		apiKey = os.Getenv("TMDB_API_KEY")
 	}
 
