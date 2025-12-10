@@ -33,6 +33,32 @@ export interface PluginUIManifest {
   displayName: string;
   navItems: PluginUINavItem[];
   routes: PluginUIRoute[];
+  configSection?: PluginConfigSection;
+}
+
+export interface PluginConfigSection {
+  title: string;
+  description?: string;
+  fields: PluginConfigField[];
+}
+
+export interface PluginConfigField {
+  key: string;
+  label: string;
+  description?: string;
+  type: string; // text, number, boolean, select, textarea, password, array
+  options?: string[];
+  defaultValue?: string;
+  required: boolean;
+  placeholder?: string;
+  validation?: PluginConfigFieldValidation;
+}
+
+export interface PluginConfigFieldValidation {
+  min?: number;
+  max?: number;
+  pattern?: string;
+  errorMessage?: string;
 }
 
 // ============================================================================
@@ -80,9 +106,9 @@ export function usePluginUIManifests() {
     queryFn: async () => {
       if (!plugins) return [];
 
-      const enabledPlugins = plugins.filter((p) => p.enabled);
+      // Fetch manifests for ALL plugins to get config sections
       const manifests = await Promise.all(
-        enabledPlugins.map((p) => getPluginUIManifest(p.id).catch(() => null)),
+        plugins.map((p) => getPluginUIManifest(p.id).catch(() => null)),
       );
 
       return manifests.filter((m): m is PluginUIManifest => m !== null);
@@ -125,4 +151,24 @@ export function usePluginNavItems(): PluginUINavItem[] {
 
   // Flatten all nav items from all manifests
   return manifests.flatMap((manifest) => manifest.navItems);
+}
+
+/**
+ * Hook to get plugins with their configuration sections
+ */
+export function usePluginsWithConfig() {
+  const { data: plugins, isLoading: pluginsLoading } = usePlugins();
+  const { data: manifests, isLoading: manifestsLoading } =
+    usePluginUIManifests();
+
+  return {
+    data: plugins?.map((plugin) => {
+      const manifest = manifests?.find((m) => m.id === plugin.id);
+      return {
+        ...plugin,
+        configSection: manifest?.configSection,
+      };
+    }),
+    isLoading: pluginsLoading || manifestsLoading,
+  };
 }

@@ -24,12 +24,19 @@ type Handler struct {
 
 // NewHandler creates a new library handler
 func NewHandler(queries *generated.Queries, logger *zap.Logger, rootDir string) *Handler {
+	scanner := NewScanner(queries, logger, rootDir)
+
 	return &Handler{
 		queries: queries,
-		scanner: NewScanner(queries, logger, rootDir),
+		scanner: scanner,
 		logger:  logger,
 		rootDir: rootDir,
 	}
+}
+
+// SetMediaPath sets the library path for a specific media type on the scanner
+func (h *Handler) SetMediaPath(mediaType, path string) {
+	h.scanner.SetMediaPath(mediaType, path)
 }
 
 // =============================================================================

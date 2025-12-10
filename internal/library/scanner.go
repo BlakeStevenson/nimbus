@@ -26,20 +26,36 @@ import (
 // =============================================================================
 
 type Scanner struct {
-	queries *generated.Queries
-	service *Service
-	logger  *zap.Logger
-	rootDir string
+	queries    *generated.Queries
+	service    *Service
+	logger     *zap.Logger
+	rootDir    string            // Legacy single root directory
+	mediaPaths map[string]string // Media type specific paths: "movie", "tv", "music", "book"
 }
 
 // NewScanner creates a new scanner instance
 func NewScanner(queries *generated.Queries, logger *zap.Logger, rootDir string) *Scanner {
 	return &Scanner{
-		queries: queries,
-		service: NewService(queries, logger),
-		logger:  logger,
-		rootDir: rootDir,
+		queries:    queries,
+		service:    NewService(queries, logger),
+		logger:     logger,
+		rootDir:    rootDir,
+		mediaPaths: make(map[string]string),
 	}
+}
+
+// SetMediaPath sets the library path for a specific media type
+func (s *Scanner) SetMediaPath(mediaType, path string) {
+	s.mediaPaths[mediaType] = path
+}
+
+// GetMediaPath returns the library path for a specific media type
+// Falls back to rootDir if media-specific path is not set
+func (s *Scanner) GetMediaPath(mediaType string) string {
+	if path, ok := s.mediaPaths[mediaType]; ok && path != "" {
+		return path
+	}
+	return s.rootDir
 }
 
 // =============================================================================
@@ -60,7 +76,7 @@ func NewScanner(queries *generated.Queries, logger *zap.Logger, rootDir string) 
 // =============================================================================
 
 func (s *Scanner) Run(ctx context.Context) error {
-	s.logger.Info("starting library scan", zap.String("root", s.rootDir))
+	s.logger.Info("starting library scan")
 
 	// Check if a scan is already running
 	state, err := s.queries.GetScannerState(ctx)
@@ -90,23 +106,48 @@ func (s *Scanner) Run(ctx context.Context) error {
 		s.logger.Warn("failed to append log", zap.Error(err))
 	}
 
-	// Walk the filesystem
-	s.logger.Info("walking filesystem", zap.String("root", s.rootDir))
-	files, err := WalkMediaFiles(s.rootDir)
-	if err != nil {
-		errMsg := fmt.Sprintf("failed to walk filesystem: %v", err)
-		s.appendError(ctx, errMsg)
-		return fmt.Errorf("failed to walk filesystem: %w", err)
+	// Collect all paths to scan
+	pathsToScan := []string{}
+
+	// Add media-specific paths if configured
+	mediaTypes := []string{"movie", "tv", "music", "book"}
+	for _, mediaType := range mediaTypes {
+		if path := s.GetMediaPath(mediaType); path != "" && path != s.rootDir {
+			pathsToScan = append(pathsToScan, path)
+			s.logger.Info("scanning media-specific path",
+				zap.String("media_type", mediaType),
+				zap.String("path", path))
+		}
 	}
 
-	totalFiles := len(files)
+	// Add root directory if no media-specific paths are configured, or as fallback
+	if len(pathsToScan) == 0 {
+		pathsToScan = append(pathsToScan, s.rootDir)
+		s.logger.Info("scanning root directory", zap.String("root", s.rootDir))
+	}
+
+	// Walk all configured paths and collect files
+	var allFiles []string
+	for _, path := range pathsToScan {
+		s.logger.Info("walking filesystem", zap.String("path", path))
+		files, err := WalkMediaFiles(path)
+		if err != nil {
+			errMsg := fmt.Sprintf("failed to walk filesystem at %s: %v", path, err)
+			s.appendError(ctx, errMsg)
+			s.logger.Warn("failed to walk path", zap.String("path", path), zap.Error(err))
+			continue // Continue with other paths even if one fails
+		}
+		allFiles = append(allFiles, files...)
+	}
+
+	totalFiles := len(allFiles)
 	s.logger.Info("found media files", zap.Int("count", totalFiles))
-	s.appendLog(ctx, "info", fmt.Sprintf("Found %d media files", totalFiles))
+	s.appendLog(ctx, "info", fmt.Sprintf("Found %d media files across all library paths", totalFiles))
 
 	// Process each file
 	var filesScanned, itemsCreated, itemsUpdated int32
 
-	for i, filePath := range files {
+	for i, filePath := range allFiles {
 		// Check for context cancellation
 		select {
 		case <-ctx.Done():

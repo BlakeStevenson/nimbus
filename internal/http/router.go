@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/blakestevenson/nimbus/internal/auth"
@@ -47,6 +48,27 @@ func NewRouter(
 	configHandler := handlers.NewConfigHandler(configStore, logger)
 	libraryHandler := library.NewHandler(queries, logger, libraryRootPath)
 	fileHandler := library.NewFileHandler(queries, logger)
+
+	// Load media-specific library paths from config
+	ctx := context.Background()
+	mediaPathConfigs := map[string]string{
+		"movie": "library.movie_path",
+		"tv":    "library.tv_path",
+		"music": "library.music_path",
+		"book":  "library.book_path",
+	}
+
+	for mediaType, configKey := range mediaPathConfigs {
+		if pathValue, err := configStore.Get(ctx, configKey); err == nil {
+			var path string
+			if err := json.Unmarshal(pathValue, &path); err == nil && path != "" {
+				libraryHandler.SetMediaPath(mediaType, path)
+				logger.Info("loaded media-specific path",
+					zap.String("media_type", mediaType),
+					zap.String("path", path))
+			}
+		}
+	}
 
 	// Initialize indexer service if plugin manager is available
 	var indexerService *indexer.Service
@@ -180,12 +202,26 @@ func NewRouter(
 			})
 		}
 
+		// Internal API routes (no authentication required - for plugin-to-host communication)
+		if downloaderService != nil {
+			if dbPool, ok := db.(*pgxpool.Pool); ok {
+				// Create download handler for internal routes
+				downloadHandler := downloader.NewHandler(downloaderService, queries, configStore, dbPool, logger)
+
+				// Import endpoint - internal use by plugins only
+				r.Post("/downloads/import", downloadHandler.ImportCompletedDownload)
+			}
+		}
+
 		// Unified downloader routes (require authentication)
 		if downloaderService != nil {
 			r.Group(func(r chi.Router) {
 				r.Use(AuthMiddleware(authService, logger))
 
-				setupDownloaderRoutes(r, downloaderService, logger)
+				// Cast db to pgxpool.Pool for downloader routes
+				if dbPool, ok := db.(*pgxpool.Pool); ok {
+					setupDownloaderRoutes(r, downloaderService, queries, configStore, dbPool, logger)
+				}
 			})
 		}
 

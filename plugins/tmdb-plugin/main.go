@@ -780,6 +780,25 @@ func (p *TMDBPlugin) UIManifest(ctx context.Context) (*plugins.UIManifest, error
 	return &plugins.UIManifest{
 		NavItems: []plugins.UINavItem{},
 		Routes:   []plugins.UIRoute{},
+		ConfigSection: &plugins.ConfigSection{
+			Title:       "TMDB Settings",
+			Description: "Configure The Movie Database (TMDB) API integration",
+			Fields: []plugins.ConfigField{
+				{
+					Key:          configKey,
+					Label:        "API Key",
+					Description:  "Your TMDB API key for fetching movie and TV show metadata",
+					Type:         "text",
+					DefaultValue: "",
+					Required:     true,
+					Placeholder:  "Enter your TMDB API key",
+					Validation: &plugins.ConfigFieldValidation{
+						Pattern:      "^[a-f0-9]{32}$",
+						ErrorMessage: "Invalid API key format. Must be 32 hexadecimal characters.",
+					},
+				},
+			},
+		},
 	}, nil
 }
 

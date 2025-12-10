@@ -57,10 +57,11 @@ func (h *APIHandlers) GetPluginUIManifest(w http.ResponseWriter, r *http.Request
 
 	// Return UI manifest with plugin metadata
 	response := map[string]interface{}{
-		"id":          lp.Meta.ID,
-		"displayName": lp.Meta.Name,
-		"navItems":    lp.UI.NavItems,
-		"routes":      lp.UI.Routes,
+		"id":            lp.Meta.ID,
+		"displayName":   lp.Meta.Name,
+		"navItems":      lp.UI.NavItems,
+		"routes":        lp.UI.Routes,
+		"configSection": lp.UI.ConfigSection,
 	}
 
 	httputil.RespondJSON(w, http.StatusOK, response)

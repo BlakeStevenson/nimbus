@@ -989,6 +989,27 @@ func (p *NZBDownloaderPlugin) downloadNZB(ctx context.Context, download *Downloa
 			download.AddLog(fmt.Sprintf("Post-processing encountered errors: %v", err))
 		}
 
+		// Find the main media file after extraction
+		mainFile, err := findMainMediaFile(downloadDirStr)
+		if err != nil {
+			download.AddLog(fmt.Sprintf("WARNING: Could not find main media file: %v", err))
+			mainFile = downloadDirStr // Use directory as fallback
+		} else {
+			download.AddLog(fmt.Sprintf("Found main media file: %s", filepath.Base(mainFile)))
+		}
+
+		// Trigger import if we have media metadata
+		if download.Metadata != nil {
+			if shouldImport(download.Metadata) {
+				download.AddLog("Importing to library...")
+				if err := importToLibrary(download, mainFile); err != nil {
+					download.AddLog(fmt.Sprintf("Import failed: %v", err))
+				} else {
+					download.AddLog("Import completed successfully")
+				}
+			}
+		}
+
 		// Mark as completed
 		download.Status = "completed"
 		now := time.Now()
@@ -1000,20 +1021,51 @@ func (p *NZBDownloaderPlugin) downloadNZB(ctx context.Context, download *Downloa
 // UIManifest returns the UI configuration for this plugin
 func (p *NZBDownloaderPlugin) UIManifest(ctx context.Context) (*plugins.UIManifest, error) {
 	return &plugins.UIManifest{
-		NavItems: []plugins.UINavItem{
-			{
-				Label: "NZB Downloader",
-				Path:  "/plugins/nzb-downloader",
-				Icon:  "download",
-			},
-		},
-		Routes: []plugins.UIRoute{
-			{
-				Path:      "/plugins/nzb-downloader",
-				BundleURL: "/src/plugins-nzb-downloader.tsx",
+		NavItems: []plugins.UINavItem{},
+		Routes:   []plugins.UIRoute{},
+		ConfigSection: &plugins.ConfigSection{
+			Title:       "NZB Downloader Settings",
+			Description: "Configure NNTP servers and download settings for Usenet downloads",
+			Fields: []plugins.ConfigField{
+				{
+					Key:          configDownloadDir,
+					Label:        "Download Directory",
+					Description:  "Directory where downloaded files will be saved",
+					Type:         "text",
+					DefaultValue: "/tmp/nzb-downloads",
+					Required:     true,
+					Placeholder:  "/path/to/downloads",
+				},
+				{
+					Key:          configConnections,
+					Label:        "Max Connections",
+					Description:  "Maximum number of concurrent connections per server",
+					Type:         "number",
+					DefaultValue: "10",
+					Required:     false,
+					Placeholder:  "10",
+					Validation: &plugins.ConfigFieldValidation{
+						Min:          intPtr(1),
+						Max:          intPtr(50),
+						ErrorMessage: "Must be between 1 and 50",
+					},
+				},
+				{
+					Key:          configServers,
+					Label:        "NNTP Servers",
+					Description:  "Configure your Usenet server connections",
+					Type:         "custom",
+					DefaultValue: "[]",
+					Required:     false,
+				},
 			},
 		},
 	}, nil
+}
+
+// Helper function to create int32 pointers
+func intPtr(i int32) *int32 {
+	return &i
 }
 
 // HandleEvent handles system events
@@ -1158,6 +1210,137 @@ func jsonResponse(statusCode int, data interface{}) (*plugins.PluginHTTPResponse
 		},
 		Body: body,
 	}, nil
+}
+
+// findMainMediaFile finds the largest media file in a directory
+func findMainMediaFile(dir string) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", fmt.Errorf("failed to read directory: %v", err)
+	}
+
+	var largestFile string
+	var largestSize int64
+
+	mediaExtensions := []string{".mkv", ".mp4", ".avi", ".m4v", ".ts", ".m2ts", ".wmv", ".mov"}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		ext := strings.ToLower(filepath.Ext(name))
+
+		// Check if it's a media file
+		isMedia := false
+		for _, mediaExt := range mediaExtensions {
+			if ext == mediaExt {
+				isMedia = true
+				break
+			}
+		}
+
+		if !isMedia {
+			continue
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		if info.Size() > largestSize {
+			largestSize = info.Size()
+			largestFile = filepath.Join(dir, name)
+		}
+	}
+
+	if largestFile == "" {
+		return "", fmt.Errorf("no media files found in directory")
+	}
+
+	return largestFile, nil
+}
+
+// shouldImport checks if download has enough metadata to trigger import
+func shouldImport(metadata map[string]interface{}) bool {
+	// Check if media_id is present (manual download for specific media)
+	if mediaID, ok := metadata["media_id"]; ok && mediaID != nil {
+		return true
+	}
+
+	// Check if we have basic media info
+	if _, hasTitle := metadata["title"]; hasTitle {
+		// For movies, title is enough
+		if mediaType, ok := metadata["media_type"].(string); ok {
+			if mediaType == "movie" {
+				return true
+			}
+			// For TV, we need season and episode
+			if mediaType == "tv" || mediaType == "tv_episode" {
+				_, hasSeason := metadata["season"]
+				_, hasEpisode := metadata["episode"]
+				return hasSeason && hasEpisode
+			}
+		}
+	}
+
+	return false
+}
+
+// importToLibrary calls the Nimbus import API to import completed download
+func importToLibrary(download *Download, sourcePath string) error {
+	// Build basic import request
+	importReq := map[string]interface{}{
+		"source_path": sourcePath,
+	}
+
+	// If we have a media_item_id, that's all the backend needs to look up the details
+	if mediaID, ok := download.Metadata["media_id"]; ok {
+		importReq["media_item_id"] = mediaID
+		fmt.Fprintf(os.Stderr, "[NZB-DOWNLOADER] Importing with media_item_id: %v\n", mediaID)
+	} else {
+		// No media_item_id, skip import - we can't import without knowing what media item this is for
+		return fmt.Errorf("no media_item_id found in download metadata - cannot import")
+	}
+
+	// Marshal request
+	reqBody, err := json.Marshal(importReq)
+	if err != nil {
+		return fmt.Errorf("failed to marshal import request: %v", err)
+	}
+
+	// Call import endpoint
+	req, err := http.NewRequest("POST", "http://localhost:8080/api/downloads/import", strings.NewReader(string(reqBody)))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to call import API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("import API returned error: %s", string(body))
+	}
+
+	// Parse response to get final path
+	var importResult map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&importResult); err != nil {
+		return fmt.Errorf("failed to decode import response: %v", err)
+	}
+
+	if finalPath, ok := importResult["final_path"].(string); ok {
+		download.AddLog(fmt.Sprintf("Imported to: %s", finalPath))
+	}
+
+	return nil
 }
 
 func main() {

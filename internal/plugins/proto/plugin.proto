@@ -76,6 +76,7 @@ message HandleAPIResponse {
 message UIManifestResponse {
   repeated UINavItem nav_items = 1;
   repeated UIRoute routes = 2;
+  ConfigSection config_section = 3;
 }
 
 message UINavItem {
@@ -88,6 +89,32 @@ message UINavItem {
 message UIRoute {
   string path = 1;
   string bundle_url = 2;
+}
+
+// Configuration section for plugin settings
+message ConfigSection {
+  string title = 1;
+  string description = 2;
+  repeated ConfigField fields = 3;
+}
+
+message ConfigField {
+  string key = 1;
+  string label = 2;
+  string description = 3;
+  string type = 4; // text, number, boolean, select, textarea, password, array
+  repeated string options = 5; // For select type
+  string default_value = 6;
+  bool required = 7;
+  string placeholder = 8;
+  ConfigFieldValidation validation = 9;
+}
+
+message ConfigFieldValidation {
+  optional int32 min = 1;
+  optional int32 max = 2;
+  optional string pattern = 3;
+  optional string error_message = 4;
 }
 
 // Event handling

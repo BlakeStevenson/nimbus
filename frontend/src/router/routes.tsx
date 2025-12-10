@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { MediaListPage } from "@/pages/MediaListPage";
 import { MediaDetailPage } from "@/pages/MediaDetailPage";
-import { ConfigPage } from "@/pages/ConfigPage";
+import { ConfigurationPage } from "@/pages/ConfigurationPage";
 import { PluginsPage } from "@/pages/PluginsPage";
 import { UsersPage } from "@/pages/UsersPage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -112,7 +112,7 @@ export const router = createBrowserRouter([
       },
       {
         path: "config",
-        element: <ConfigPage />,
+        element: <ConfigurationPage />,
       },
       {
         path: "plugins",

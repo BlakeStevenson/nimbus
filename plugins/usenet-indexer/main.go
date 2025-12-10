@@ -523,17 +523,20 @@ func (p *UsenetIndexerPlugin) handleRSS(ctx context.Context, req *plugins.Plugin
 // UIManifest returns the UI configuration for this plugin
 func (p *UsenetIndexerPlugin) UIManifest(ctx context.Context) (*plugins.UIManifest, error) {
 	return &plugins.UIManifest{
-		NavItems: []plugins.UINavItem{
-			{
-				Label: "Usenet Indexer",
-				Path:  "/plugins/usenet-indexer",
-				Icon:  "search",
-			},
-		},
-		Routes: []plugins.UIRoute{
-			{
-				Path:      "/plugins/usenet-indexer",
-				BundleURL: "/src/plugins-usenet-indexer.tsx",
+		NavItems: []plugins.UINavItem{},
+		Routes:   []plugins.UIRoute{},
+		ConfigSection: &plugins.ConfigSection{
+			Title:       "Usenet Indexer Settings",
+			Description: "Configure Newznab-compatible Usenet indexers for searching releases",
+			Fields: []plugins.ConfigField{
+				{
+					Key:          configIndexers,
+					Label:        "Indexers",
+					Description:  "Configure your Newznab-compatible indexers",
+					Type:         "custom",
+					DefaultValue: "[]",
+					Required:     false,
+				},
 			},
 		},
 	}, nil

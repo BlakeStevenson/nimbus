@@ -171,10 +171,51 @@ func (s *GRPCServer) UIManifest(ctx context.Context, req *proto.UIManifestReques
 		}
 	}
 
-	return &proto.UIManifestResponse{
+	resp := &proto.UIManifestResponse{
 		NavItems: navItems,
 		Routes:   routes,
-	}, nil
+	}
+
+	// Convert ConfigSection if present
+	if manifest.ConfigSection != nil {
+		fields := make([]*proto.ConfigField, len(manifest.ConfigSection.Fields))
+		for i, field := range manifest.ConfigSection.Fields {
+			protoField := &proto.ConfigField{
+				Key:          field.Key,
+				Label:        field.Label,
+				Description:  field.Description,
+				Type:         field.Type,
+				Options:      field.Options,
+				DefaultValue: field.DefaultValue,
+				Required:     field.Required,
+				Placeholder:  field.Placeholder,
+			}
+
+			if field.Validation != nil {
+				validation := &proto.ConfigFieldValidation{
+					Min: field.Validation.Min,
+					Max: field.Validation.Max,
+				}
+				if field.Validation.Pattern != "" {
+					validation.Pattern = &field.Validation.Pattern
+				}
+				if field.Validation.ErrorMessage != "" {
+					validation.ErrorMessage = &field.Validation.ErrorMessage
+				}
+				protoField.Validation = validation
+			}
+
+			fields[i] = protoField
+		}
+
+		resp.ConfigSection = &proto.ConfigSection{
+			Title:       manifest.ConfigSection.Title,
+			Description: manifest.ConfigSection.Description,
+			Fields:      fields,
+		}
+	}
+
+	return resp, nil
 }
 
 // HandleEvent implements the HandleEvent RPC
@@ -412,10 +453,51 @@ func (c *GRPCClient) UIManifest(ctx context.Context) (*UIManifest, error) {
 		}
 	}
 
-	return &UIManifest{
+	manifest := &UIManifest{
 		NavItems: navItems,
 		Routes:   routes,
-	}, nil
+	}
+
+	// Convert ConfigSection if present
+	if resp.ConfigSection != nil {
+		fields := make([]ConfigField, len(resp.ConfigSection.Fields))
+		for i, protoField := range resp.ConfigSection.Fields {
+			field := ConfigField{
+				Key:          protoField.Key,
+				Label:        protoField.Label,
+				Description:  protoField.Description,
+				Type:         protoField.Type,
+				Options:      protoField.Options,
+				DefaultValue: protoField.DefaultValue,
+				Required:     protoField.Required,
+				Placeholder:  protoField.Placeholder,
+			}
+
+			if protoField.Validation != nil {
+				validation := &ConfigFieldValidation{
+					Min: protoField.Validation.Min,
+					Max: protoField.Validation.Max,
+				}
+				if protoField.Validation.Pattern != nil {
+					validation.Pattern = *protoField.Validation.Pattern
+				}
+				if protoField.Validation.ErrorMessage != nil {
+					validation.ErrorMessage = *protoField.Validation.ErrorMessage
+				}
+				field.Validation = validation
+			}
+
+			fields[i] = field
+		}
+
+		manifest.ConfigSection = &ConfigSection{
+			Title:       resp.ConfigSection.Title,
+			Description: resp.ConfigSection.Description,
+			Fields:      fields,
+		}
+	}
+
+	return manifest, nil
 }
 
 // HandleEvent calls the plugin's HandleEvent method

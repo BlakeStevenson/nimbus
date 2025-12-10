@@ -66,8 +66,37 @@ type UIRoute struct {
 
 // UIManifest describes the UI extensions provided by a plugin
 type UIManifest struct {
-	NavItems []UINavItem `json:"navItems"`
-	Routes   []UIRoute   `json:"routes"`
+	NavItems      []UINavItem    `json:"navItems"`
+	Routes        []UIRoute      `json:"routes"`
+	ConfigSection *ConfigSection `json:"configSection,omitempty"`
+}
+
+// ConfigSection describes the configuration UI for a plugin
+type ConfigSection struct {
+	Title       string        `json:"title"`
+	Description string        `json:"description,omitempty"`
+	Fields      []ConfigField `json:"fields"`
+}
+
+// ConfigField describes a single configuration field
+type ConfigField struct {
+	Key          string                 `json:"key"`
+	Label        string                 `json:"label"`
+	Description  string                 `json:"description,omitempty"`
+	Type         string                 `json:"type"` // text, number, boolean, select, textarea, password, array
+	Options      []string               `json:"options,omitempty"`
+	DefaultValue string                 `json:"defaultValue,omitempty"`
+	Required     bool                   `json:"required"`
+	Placeholder  string                 `json:"placeholder,omitempty"`
+	Validation   *ConfigFieldValidation `json:"validation,omitempty"`
+}
+
+// ConfigFieldValidation describes validation rules for a configuration field
+type ConfigFieldValidation struct {
+	Min          *int32 `json:"min,omitempty"`
+	Max          *int32 `json:"max,omitempty"`
+	Pattern      string `json:"pattern,omitempty"`
+	ErrorMessage string `json:"errorMessage,omitempty"`
 }
 
 // Event represents a system event that can be sent to plugins

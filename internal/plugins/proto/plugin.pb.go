@@ -530,6 +530,7 @@ type UIManifestResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NavItems      []*UINavItem           `protobuf:"bytes,1,rep,name=nav_items,json=navItems,proto3" json:"nav_items,omitempty"`
 	Routes        []*UIRoute             `protobuf:"bytes,2,rep,name=routes,proto3" json:"routes,omitempty"`
+	ConfigSection *ConfigSection         `protobuf:"bytes,3,opt,name=config_section,json=configSection,proto3" json:"config_section,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -574,6 +575,13 @@ func (x *UIManifestResponse) GetNavItems() []*UINavItem {
 func (x *UIManifestResponse) GetRoutes() []*UIRoute {
 	if x != nil {
 		return x.Routes
+	}
+	return nil
+}
+
+func (x *UIManifestResponse) GetConfigSection() *ConfigSection {
+	if x != nil {
+		return x.ConfigSection
 	}
 	return nil
 }
@@ -698,6 +706,243 @@ func (x *UIRoute) GetBundleUrl() string {
 	return ""
 }
 
+// Configuration section for plugin settings
+type ConfigSection struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Title         string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Fields        []*ConfigField         `protobuf:"bytes,3,rep,name=fields,proto3" json:"fields,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfigSection) Reset() {
+	*x = ConfigSection{}
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfigSection) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigSection) ProtoMessage() {}
+
+func (x *ConfigSection) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfigSection.ProtoReflect.Descriptor instead.
+func (*ConfigSection) Descriptor() ([]byte, []int) {
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ConfigSection) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *ConfigSection) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *ConfigSection) GetFields() []*ConfigField {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+type ConfigField struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`       // text, number, boolean, select, textarea, password, array
+	Options       []string               `protobuf:"bytes,5,rep,name=options,proto3" json:"options,omitempty"` // For select type
+	DefaultValue  string                 `protobuf:"bytes,6,opt,name=default_value,json=defaultValue,proto3" json:"default_value,omitempty"`
+	Required      bool                   `protobuf:"varint,7,opt,name=required,proto3" json:"required,omitempty"`
+	Placeholder   string                 `protobuf:"bytes,8,opt,name=placeholder,proto3" json:"placeholder,omitempty"`
+	Validation    *ConfigFieldValidation `protobuf:"bytes,9,opt,name=validation,proto3" json:"validation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfigField) Reset() {
+	*x = ConfigField{}
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfigField) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigField) ProtoMessage() {}
+
+func (x *ConfigField) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfigField.ProtoReflect.Descriptor instead.
+func (*ConfigField) Descriptor() ([]byte, []int) {
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ConfigField) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *ConfigField) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *ConfigField) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *ConfigField) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *ConfigField) GetOptions() []string {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+func (x *ConfigField) GetDefaultValue() string {
+	if x != nil {
+		return x.DefaultValue
+	}
+	return ""
+}
+
+func (x *ConfigField) GetRequired() bool {
+	if x != nil {
+		return x.Required
+	}
+	return false
+}
+
+func (x *ConfigField) GetPlaceholder() string {
+	if x != nil {
+		return x.Placeholder
+	}
+	return ""
+}
+
+func (x *ConfigField) GetValidation() *ConfigFieldValidation {
+	if x != nil {
+		return x.Validation
+	}
+	return nil
+}
+
+type ConfigFieldValidation struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Min           *int32                 `protobuf:"varint,1,opt,name=min,proto3,oneof" json:"min,omitempty"`
+	Max           *int32                 `protobuf:"varint,2,opt,name=max,proto3,oneof" json:"max,omitempty"`
+	Pattern       *string                `protobuf:"bytes,3,opt,name=pattern,proto3,oneof" json:"pattern,omitempty"`
+	ErrorMessage  *string                `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3,oneof" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfigFieldValidation) Reset() {
+	*x = ConfigFieldValidation{}
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfigFieldValidation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigFieldValidation) ProtoMessage() {}
+
+func (x *ConfigFieldValidation) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfigFieldValidation.ProtoReflect.Descriptor instead.
+func (*ConfigFieldValidation) Descriptor() ([]byte, []int) {
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ConfigFieldValidation) GetMin() int32 {
+	if x != nil && x.Min != nil {
+		return *x.Min
+	}
+	return 0
+}
+
+func (x *ConfigFieldValidation) GetMax() int32 {
+	if x != nil && x.Max != nil {
+		return *x.Max
+	}
+	return 0
+}
+
+func (x *ConfigFieldValidation) GetPattern() string {
+	if x != nil && x.Pattern != nil {
+		return *x.Pattern
+	}
+	return ""
+}
+
+func (x *ConfigFieldValidation) GetErrorMessage() string {
+	if x != nil && x.ErrorMessage != nil {
+		return *x.ErrorMessage
+	}
+	return ""
+}
+
 // Event handling
 type HandleEventRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -710,7 +955,7 @@ type HandleEventRequest struct {
 
 func (x *HandleEventRequest) Reset() {
 	*x = HandleEventRequest{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[12]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -722,7 +967,7 @@ func (x *HandleEventRequest) String() string {
 func (*HandleEventRequest) ProtoMessage() {}
 
 func (x *HandleEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[12]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -735,7 +980,7 @@ func (x *HandleEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HandleEventRequest.ProtoReflect.Descriptor instead.
 func (*HandleEventRequest) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{12}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *HandleEventRequest) GetType() string {
@@ -769,7 +1014,7 @@ type HandleEventResponse struct {
 
 func (x *HandleEventResponse) Reset() {
 	*x = HandleEventResponse{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[13]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -781,7 +1026,7 @@ func (x *HandleEventResponse) String() string {
 func (*HandleEventResponse) ProtoMessage() {}
 
 func (x *HandleEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[13]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -794,7 +1039,7 @@ func (x *HandleEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HandleEventResponse.ProtoReflect.Descriptor instead.
 func (*HandleEventResponse) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{13}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *HandleEventResponse) GetSuccess() bool {
@@ -821,7 +1066,7 @@ type ConfigGetRequest struct {
 
 func (x *ConfigGetRequest) Reset() {
 	*x = ConfigGetRequest{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[14]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -833,7 +1078,7 @@ func (x *ConfigGetRequest) String() string {
 func (*ConfigGetRequest) ProtoMessage() {}
 
 func (x *ConfigGetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[14]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -846,7 +1091,7 @@ func (x *ConfigGetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigGetRequest.ProtoReflect.Descriptor instead.
 func (*ConfigGetRequest) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{14}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ConfigGetRequest) GetKey() string {
@@ -866,7 +1111,7 @@ type ConfigGetResponse struct {
 
 func (x *ConfigGetResponse) Reset() {
 	*x = ConfigGetResponse{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[15]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -878,7 +1123,7 @@ func (x *ConfigGetResponse) String() string {
 func (*ConfigGetResponse) ProtoMessage() {}
 
 func (x *ConfigGetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[15]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -891,7 +1136,7 @@ func (x *ConfigGetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigGetResponse.ProtoReflect.Descriptor instead.
 func (*ConfigGetResponse) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{15}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ConfigGetResponse) GetValue() []byte {
@@ -917,7 +1162,7 @@ type ConfigGetStringRequest struct {
 
 func (x *ConfigGetStringRequest) Reset() {
 	*x = ConfigGetStringRequest{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[16]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -929,7 +1174,7 @@ func (x *ConfigGetStringRequest) String() string {
 func (*ConfigGetStringRequest) ProtoMessage() {}
 
 func (x *ConfigGetStringRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[16]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -942,7 +1187,7 @@ func (x *ConfigGetStringRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigGetStringRequest.ProtoReflect.Descriptor instead.
 func (*ConfigGetStringRequest) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{16}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ConfigGetStringRequest) GetKey() string {
@@ -962,7 +1207,7 @@ type ConfigGetStringResponse struct {
 
 func (x *ConfigGetStringResponse) Reset() {
 	*x = ConfigGetStringResponse{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[17]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -974,7 +1219,7 @@ func (x *ConfigGetStringResponse) String() string {
 func (*ConfigGetStringResponse) ProtoMessage() {}
 
 func (x *ConfigGetStringResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[17]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -987,7 +1232,7 @@ func (x *ConfigGetStringResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigGetStringResponse.ProtoReflect.Descriptor instead.
 func (*ConfigGetStringResponse) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{17}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ConfigGetStringResponse) GetValue() string {
@@ -1014,7 +1259,7 @@ type ConfigSetRequest struct {
 
 func (x *ConfigSetRequest) Reset() {
 	*x = ConfigSetRequest{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[18]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1026,7 +1271,7 @@ func (x *ConfigSetRequest) String() string {
 func (*ConfigSetRequest) ProtoMessage() {}
 
 func (x *ConfigSetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[18]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1039,7 +1284,7 @@ func (x *ConfigSetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigSetRequest.ProtoReflect.Descriptor instead.
 func (*ConfigSetRequest) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{18}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ConfigSetRequest) GetKey() string {
@@ -1065,7 +1310,7 @@ type ConfigSetResponse struct {
 
 func (x *ConfigSetResponse) Reset() {
 	*x = ConfigSetResponse{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[19]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1077,7 +1322,7 @@ func (x *ConfigSetResponse) String() string {
 func (*ConfigSetResponse) ProtoMessage() {}
 
 func (x *ConfigSetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[19]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1090,7 +1335,7 @@ func (x *ConfigSetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigSetResponse.ProtoReflect.Descriptor instead.
 func (*ConfigSetResponse) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{19}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ConfigSetResponse) GetError() string {
@@ -1109,7 +1354,7 @@ type ConfigDeleteRequest struct {
 
 func (x *ConfigDeleteRequest) Reset() {
 	*x = ConfigDeleteRequest{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[20]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1121,7 +1366,7 @@ func (x *ConfigDeleteRequest) String() string {
 func (*ConfigDeleteRequest) ProtoMessage() {}
 
 func (x *ConfigDeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[20]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1134,7 +1379,7 @@ func (x *ConfigDeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigDeleteRequest.ProtoReflect.Descriptor instead.
 func (*ConfigDeleteRequest) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{20}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ConfigDeleteRequest) GetKey() string {
@@ -1153,7 +1398,7 @@ type ConfigDeleteResponse struct {
 
 func (x *ConfigDeleteResponse) Reset() {
 	*x = ConfigDeleteResponse{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[21]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1165,7 +1410,7 @@ func (x *ConfigDeleteResponse) String() string {
 func (*ConfigDeleteResponse) ProtoMessage() {}
 
 func (x *ConfigDeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[21]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1178,7 +1423,7 @@ func (x *ConfigDeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigDeleteResponse.ProtoReflect.Descriptor instead.
 func (*ConfigDeleteResponse) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{21}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ConfigDeleteResponse) GetError() string {
@@ -1197,7 +1442,7 @@ type IsIndexerRequest struct {
 
 func (x *IsIndexerRequest) Reset() {
 	*x = IsIndexerRequest{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[22]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1209,7 +1454,7 @@ func (x *IsIndexerRequest) String() string {
 func (*IsIndexerRequest) ProtoMessage() {}
 
 func (x *IsIndexerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[22]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1222,7 +1467,7 @@ func (x *IsIndexerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsIndexerRequest.ProtoReflect.Descriptor instead.
 func (*IsIndexerRequest) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{22}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{25}
 }
 
 type IsIndexerResponse struct {
@@ -1235,7 +1480,7 @@ type IsIndexerResponse struct {
 
 func (x *IsIndexerResponse) Reset() {
 	*x = IsIndexerResponse{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[23]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1247,7 +1492,7 @@ func (x *IsIndexerResponse) String() string {
 func (*IsIndexerResponse) ProtoMessage() {}
 
 func (x *IsIndexerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[23]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1260,7 +1505,7 @@ func (x *IsIndexerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsIndexerResponse.ProtoReflect.Descriptor instead.
 func (*IsIndexerResponse) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{23}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *IsIndexerResponse) GetIsIndexer() bool {
@@ -1286,7 +1531,7 @@ type IsDownloaderRequest struct {
 
 func (x *IsDownloaderRequest) Reset() {
 	*x = IsDownloaderRequest{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[24]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1298,7 +1543,7 @@ func (x *IsDownloaderRequest) String() string {
 func (*IsDownloaderRequest) ProtoMessage() {}
 
 func (x *IsDownloaderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[24]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1311,7 +1556,7 @@ func (x *IsDownloaderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsDownloaderRequest.ProtoReflect.Descriptor instead.
 func (*IsDownloaderRequest) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{24}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{27}
 }
 
 type IsDownloaderResponse struct {
@@ -1324,7 +1569,7 @@ type IsDownloaderResponse struct {
 
 func (x *IsDownloaderResponse) Reset() {
 	*x = IsDownloaderResponse{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[25]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1336,7 +1581,7 @@ func (x *IsDownloaderResponse) String() string {
 func (*IsDownloaderResponse) ProtoMessage() {}
 
 func (x *IsDownloaderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[25]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1349,7 +1594,7 @@ func (x *IsDownloaderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsDownloaderResponse.ProtoReflect.Descriptor instead.
 func (*IsDownloaderResponse) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{25}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *IsDownloaderResponse) GetIsDownloader() bool {
@@ -1385,7 +1630,7 @@ type IndexerSearchRequest struct {
 
 func (x *IndexerSearchRequest) Reset() {
 	*x = IndexerSearchRequest{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[26]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1397,7 +1642,7 @@ func (x *IndexerSearchRequest) String() string {
 func (*IndexerSearchRequest) ProtoMessage() {}
 
 func (x *IndexerSearchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[26]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1410,7 +1655,7 @@ func (x *IndexerSearchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexerSearchRequest.ProtoReflect.Descriptor instead.
 func (*IndexerSearchRequest) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{26}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *IndexerSearchRequest) GetQuery() string {
@@ -1503,7 +1748,7 @@ type IndexerSearchResponse struct {
 
 func (x *IndexerSearchResponse) Reset() {
 	*x = IndexerSearchResponse{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[27]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1515,7 +1760,7 @@ func (x *IndexerSearchResponse) String() string {
 func (*IndexerSearchResponse) ProtoMessage() {}
 
 func (x *IndexerSearchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[27]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1528,7 +1773,7 @@ func (x *IndexerSearchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexerSearchResponse.ProtoReflect.Descriptor instead.
 func (*IndexerSearchResponse) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{27}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *IndexerSearchResponse) GetReleases() []*IndexerRelease {
@@ -1586,7 +1831,7 @@ type IndexerRelease struct {
 
 func (x *IndexerRelease) Reset() {
 	*x = IndexerRelease{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[28]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1598,7 +1843,7 @@ func (x *IndexerRelease) String() string {
 func (*IndexerRelease) ProtoMessage() {}
 
 func (x *IndexerRelease) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[28]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1611,7 +1856,7 @@ func (x *IndexerRelease) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexerRelease.ProtoReflect.Descriptor instead.
 func (*IndexerRelease) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{28}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *IndexerRelease) GetGuid() string {
@@ -1747,10 +1992,11 @@ const file_internal_plugins_proto_plugin_proto_rawDesc = "" +
 	"\x04body\x18\x03 \x01(\fR\x04body\x1aM\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12'\n" +
-	"\x05value\x18\x02 \x01(\v2\x11.proto.StringListR\x05value:\x028\x01\"k\n" +
+	"\x05value\x18\x02 \x01(\v2\x11.proto.StringListR\x05value:\x028\x01\"\xa8\x01\n" +
 	"\x12UIManifestResponse\x12-\n" +
 	"\tnav_items\x18\x01 \x03(\v2\x10.proto.UINavItemR\bnavItems\x12&\n" +
-	"\x06routes\x18\x02 \x03(\v2\x0e.proto.UIRouteR\x06routes\"_\n" +
+	"\x06routes\x18\x02 \x03(\v2\x0e.proto.UIRouteR\x06routes\x12;\n" +
+	"\x0econfig_section\x18\x03 \x01(\v2\x14.proto.ConfigSectionR\rconfigSection\"_\n" +
 	"\tUINavItem\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x14\n" +
@@ -1759,7 +2005,33 @@ const file_internal_plugins_proto_plugin_proto_rawDesc = "" +
 	"\aUIRoute\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1d\n" +
 	"\n" +
-	"bundle_url\x18\x02 \x01(\tR\tbundleUrl\"Z\n" +
+	"bundle_url\x18\x02 \x01(\tR\tbundleUrl\"s\n" +
+	"\rConfigSection\x12\x14\n" +
+	"\x05title\x18\x01 \x01(\tR\x05title\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12*\n" +
+	"\x06fields\x18\x03 \x03(\v2\x12.proto.ConfigFieldR\x06fields\"\xa6\x02\n" +
+	"\vConfigField\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x12\n" +
+	"\x04type\x18\x04 \x01(\tR\x04type\x12\x18\n" +
+	"\aoptions\x18\x05 \x03(\tR\aoptions\x12#\n" +
+	"\rdefault_value\x18\x06 \x01(\tR\fdefaultValue\x12\x1a\n" +
+	"\brequired\x18\a \x01(\bR\brequired\x12 \n" +
+	"\vplaceholder\x18\b \x01(\tR\vplaceholder\x12<\n" +
+	"\n" +
+	"validation\x18\t \x01(\v2\x1c.proto.ConfigFieldValidationR\n" +
+	"validation\"\xbc\x01\n" +
+	"\x15ConfigFieldValidation\x12\x15\n" +
+	"\x03min\x18\x01 \x01(\x05H\x00R\x03min\x88\x01\x01\x12\x15\n" +
+	"\x03max\x18\x02 \x01(\x05H\x01R\x03max\x88\x01\x01\x12\x1d\n" +
+	"\apattern\x18\x03 \x01(\tH\x02R\apattern\x88\x01\x01\x12(\n" +
+	"\rerror_message\x18\x04 \x01(\tH\x03R\ferrorMessage\x88\x01\x01B\x06\n" +
+	"\x04_minB\x06\n" +
+	"\x04_maxB\n" +
+	"\n" +
+	"\b_patternB\x10\n" +
+	"\x0e_error_message\"Z\n" +
 	"\x12HandleEventRequest\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\fR\x04data\x12\x1c\n" +
@@ -1866,7 +2138,7 @@ func file_internal_plugins_proto_plugin_proto_rawDescGZIP() []byte {
 	return file_internal_plugins_proto_plugin_proto_rawDescData
 }
 
-var file_internal_plugins_proto_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_internal_plugins_proto_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_internal_plugins_proto_plugin_proto_goTypes = []any{
 	(*MetadataRequest)(nil),         // 0: proto.MetadataRequest
 	(*APIRoutesRequest)(nil),        // 1: proto.APIRoutesRequest
@@ -1880,69 +2152,75 @@ var file_internal_plugins_proto_plugin_proto_goTypes = []any{
 	(*UIManifestResponse)(nil),      // 9: proto.UIManifestResponse
 	(*UINavItem)(nil),               // 10: proto.UINavItem
 	(*UIRoute)(nil),                 // 11: proto.UIRoute
-	(*HandleEventRequest)(nil),      // 12: proto.HandleEventRequest
-	(*HandleEventResponse)(nil),     // 13: proto.HandleEventResponse
-	(*ConfigGetRequest)(nil),        // 14: proto.ConfigGetRequest
-	(*ConfigGetResponse)(nil),       // 15: proto.ConfigGetResponse
-	(*ConfigGetStringRequest)(nil),  // 16: proto.ConfigGetStringRequest
-	(*ConfigGetStringResponse)(nil), // 17: proto.ConfigGetStringResponse
-	(*ConfigSetRequest)(nil),        // 18: proto.ConfigSetRequest
-	(*ConfigSetResponse)(nil),       // 19: proto.ConfigSetResponse
-	(*ConfigDeleteRequest)(nil),     // 20: proto.ConfigDeleteRequest
-	(*ConfigDeleteResponse)(nil),    // 21: proto.ConfigDeleteResponse
-	(*IsIndexerRequest)(nil),        // 22: proto.IsIndexerRequest
-	(*IsIndexerResponse)(nil),       // 23: proto.IsIndexerResponse
-	(*IsDownloaderRequest)(nil),     // 24: proto.IsDownloaderRequest
-	(*IsDownloaderResponse)(nil),    // 25: proto.IsDownloaderResponse
-	(*IndexerSearchRequest)(nil),    // 26: proto.IndexerSearchRequest
-	(*IndexerSearchResponse)(nil),   // 27: proto.IndexerSearchResponse
-	(*IndexerRelease)(nil),          // 28: proto.IndexerRelease
-	nil,                             // 29: proto.HandleAPIRequest.QueryEntry
-	nil,                             // 30: proto.HandleAPIRequest.HeadersEntry
-	nil,                             // 31: proto.HandleAPIResponse.HeadersEntry
-	nil,                             // 32: proto.IndexerRelease.AttributesEntry
+	(*ConfigSection)(nil),           // 12: proto.ConfigSection
+	(*ConfigField)(nil),             // 13: proto.ConfigField
+	(*ConfigFieldValidation)(nil),   // 14: proto.ConfigFieldValidation
+	(*HandleEventRequest)(nil),      // 15: proto.HandleEventRequest
+	(*HandleEventResponse)(nil),     // 16: proto.HandleEventResponse
+	(*ConfigGetRequest)(nil),        // 17: proto.ConfigGetRequest
+	(*ConfigGetResponse)(nil),       // 18: proto.ConfigGetResponse
+	(*ConfigGetStringRequest)(nil),  // 19: proto.ConfigGetStringRequest
+	(*ConfigGetStringResponse)(nil), // 20: proto.ConfigGetStringResponse
+	(*ConfigSetRequest)(nil),        // 21: proto.ConfigSetRequest
+	(*ConfigSetResponse)(nil),       // 22: proto.ConfigSetResponse
+	(*ConfigDeleteRequest)(nil),     // 23: proto.ConfigDeleteRequest
+	(*ConfigDeleteResponse)(nil),    // 24: proto.ConfigDeleteResponse
+	(*IsIndexerRequest)(nil),        // 25: proto.IsIndexerRequest
+	(*IsIndexerResponse)(nil),       // 26: proto.IsIndexerResponse
+	(*IsDownloaderRequest)(nil),     // 27: proto.IsDownloaderRequest
+	(*IsDownloaderResponse)(nil),    // 28: proto.IsDownloaderResponse
+	(*IndexerSearchRequest)(nil),    // 29: proto.IndexerSearchRequest
+	(*IndexerSearchResponse)(nil),   // 30: proto.IndexerSearchResponse
+	(*IndexerRelease)(nil),          // 31: proto.IndexerRelease
+	nil,                             // 32: proto.HandleAPIRequest.QueryEntry
+	nil,                             // 33: proto.HandleAPIRequest.HeadersEntry
+	nil,                             // 34: proto.HandleAPIResponse.HeadersEntry
+	nil,                             // 35: proto.IndexerRelease.AttributesEntry
 }
 var file_internal_plugins_proto_plugin_proto_depIdxs = []int32{
 	5,  // 0: proto.APIRoutesResponse.routes:type_name -> proto.RouteDescriptor
-	29, // 1: proto.HandleAPIRequest.query:type_name -> proto.HandleAPIRequest.QueryEntry
-	30, // 2: proto.HandleAPIRequest.headers:type_name -> proto.HandleAPIRequest.HeadersEntry
-	31, // 3: proto.HandleAPIResponse.headers:type_name -> proto.HandleAPIResponse.HeadersEntry
+	32, // 1: proto.HandleAPIRequest.query:type_name -> proto.HandleAPIRequest.QueryEntry
+	33, // 2: proto.HandleAPIRequest.headers:type_name -> proto.HandleAPIRequest.HeadersEntry
+	34, // 3: proto.HandleAPIResponse.headers:type_name -> proto.HandleAPIResponse.HeadersEntry
 	10, // 4: proto.UIManifestResponse.nav_items:type_name -> proto.UINavItem
 	11, // 5: proto.UIManifestResponse.routes:type_name -> proto.UIRoute
-	28, // 6: proto.IndexerSearchResponse.releases:type_name -> proto.IndexerRelease
-	32, // 7: proto.IndexerRelease.attributes:type_name -> proto.IndexerRelease.AttributesEntry
-	7,  // 8: proto.HandleAPIRequest.QueryEntry.value:type_name -> proto.StringList
-	7,  // 9: proto.HandleAPIRequest.HeadersEntry.value:type_name -> proto.StringList
-	7,  // 10: proto.HandleAPIResponse.HeadersEntry.value:type_name -> proto.StringList
-	0,  // 11: proto.PluginService.Metadata:input_type -> proto.MetadataRequest
-	1,  // 12: proto.PluginService.APIRoutes:input_type -> proto.APIRoutesRequest
-	6,  // 13: proto.PluginService.HandleAPI:input_type -> proto.HandleAPIRequest
-	2,  // 14: proto.PluginService.UIManifest:input_type -> proto.UIManifestRequest
-	12, // 15: proto.PluginService.HandleEvent:input_type -> proto.HandleEventRequest
-	22, // 16: proto.PluginService.IsIndexer:input_type -> proto.IsIndexerRequest
-	26, // 17: proto.PluginService.Search:input_type -> proto.IndexerSearchRequest
-	24, // 18: proto.PluginService.IsDownloader:input_type -> proto.IsDownloaderRequest
-	14, // 19: proto.SDKService.ConfigGet:input_type -> proto.ConfigGetRequest
-	16, // 20: proto.SDKService.ConfigGetString:input_type -> proto.ConfigGetStringRequest
-	18, // 21: proto.SDKService.ConfigSet:input_type -> proto.ConfigSetRequest
-	20, // 22: proto.SDKService.ConfigDelete:input_type -> proto.ConfigDeleteRequest
-	3,  // 23: proto.PluginService.Metadata:output_type -> proto.MetadataResponse
-	4,  // 24: proto.PluginService.APIRoutes:output_type -> proto.APIRoutesResponse
-	8,  // 25: proto.PluginService.HandleAPI:output_type -> proto.HandleAPIResponse
-	9,  // 26: proto.PluginService.UIManifest:output_type -> proto.UIManifestResponse
-	13, // 27: proto.PluginService.HandleEvent:output_type -> proto.HandleEventResponse
-	23, // 28: proto.PluginService.IsIndexer:output_type -> proto.IsIndexerResponse
-	27, // 29: proto.PluginService.Search:output_type -> proto.IndexerSearchResponse
-	25, // 30: proto.PluginService.IsDownloader:output_type -> proto.IsDownloaderResponse
-	15, // 31: proto.SDKService.ConfigGet:output_type -> proto.ConfigGetResponse
-	17, // 32: proto.SDKService.ConfigGetString:output_type -> proto.ConfigGetStringResponse
-	19, // 33: proto.SDKService.ConfigSet:output_type -> proto.ConfigSetResponse
-	21, // 34: proto.SDKService.ConfigDelete:output_type -> proto.ConfigDeleteResponse
-	23, // [23:35] is the sub-list for method output_type
-	11, // [11:23] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	12, // 6: proto.UIManifestResponse.config_section:type_name -> proto.ConfigSection
+	13, // 7: proto.ConfigSection.fields:type_name -> proto.ConfigField
+	14, // 8: proto.ConfigField.validation:type_name -> proto.ConfigFieldValidation
+	31, // 9: proto.IndexerSearchResponse.releases:type_name -> proto.IndexerRelease
+	35, // 10: proto.IndexerRelease.attributes:type_name -> proto.IndexerRelease.AttributesEntry
+	7,  // 11: proto.HandleAPIRequest.QueryEntry.value:type_name -> proto.StringList
+	7,  // 12: proto.HandleAPIRequest.HeadersEntry.value:type_name -> proto.StringList
+	7,  // 13: proto.HandleAPIResponse.HeadersEntry.value:type_name -> proto.StringList
+	0,  // 14: proto.PluginService.Metadata:input_type -> proto.MetadataRequest
+	1,  // 15: proto.PluginService.APIRoutes:input_type -> proto.APIRoutesRequest
+	6,  // 16: proto.PluginService.HandleAPI:input_type -> proto.HandleAPIRequest
+	2,  // 17: proto.PluginService.UIManifest:input_type -> proto.UIManifestRequest
+	15, // 18: proto.PluginService.HandleEvent:input_type -> proto.HandleEventRequest
+	25, // 19: proto.PluginService.IsIndexer:input_type -> proto.IsIndexerRequest
+	29, // 20: proto.PluginService.Search:input_type -> proto.IndexerSearchRequest
+	27, // 21: proto.PluginService.IsDownloader:input_type -> proto.IsDownloaderRequest
+	17, // 22: proto.SDKService.ConfigGet:input_type -> proto.ConfigGetRequest
+	19, // 23: proto.SDKService.ConfigGetString:input_type -> proto.ConfigGetStringRequest
+	21, // 24: proto.SDKService.ConfigSet:input_type -> proto.ConfigSetRequest
+	23, // 25: proto.SDKService.ConfigDelete:input_type -> proto.ConfigDeleteRequest
+	3,  // 26: proto.PluginService.Metadata:output_type -> proto.MetadataResponse
+	4,  // 27: proto.PluginService.APIRoutes:output_type -> proto.APIRoutesResponse
+	8,  // 28: proto.PluginService.HandleAPI:output_type -> proto.HandleAPIResponse
+	9,  // 29: proto.PluginService.UIManifest:output_type -> proto.UIManifestResponse
+	16, // 30: proto.PluginService.HandleEvent:output_type -> proto.HandleEventResponse
+	26, // 31: proto.PluginService.IsIndexer:output_type -> proto.IsIndexerResponse
+	30, // 32: proto.PluginService.Search:output_type -> proto.IndexerSearchResponse
+	28, // 33: proto.PluginService.IsDownloader:output_type -> proto.IsDownloaderResponse
+	18, // 34: proto.SDKService.ConfigGet:output_type -> proto.ConfigGetResponse
+	20, // 35: proto.SDKService.ConfigGetString:output_type -> proto.ConfigGetStringResponse
+	22, // 36: proto.SDKService.ConfigSet:output_type -> proto.ConfigSetResponse
+	24, // 37: proto.SDKService.ConfigDelete:output_type -> proto.ConfigDeleteResponse
+	26, // [26:38] is the sub-list for method output_type
+	14, // [14:26] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_internal_plugins_proto_plugin_proto_init() }
@@ -1951,13 +2229,14 @@ func file_internal_plugins_proto_plugin_proto_init() {
 		return
 	}
 	file_internal_plugins_proto_plugin_proto_msgTypes[6].OneofWrappers = []any{}
+	file_internal_plugins_proto_plugin_proto_msgTypes[14].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_plugins_proto_plugin_proto_rawDesc), len(file_internal_plugins_proto_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   33,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

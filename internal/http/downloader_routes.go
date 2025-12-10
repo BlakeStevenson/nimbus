@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/blakestevenson/nimbus/internal/configstore"
+	"github.com/blakestevenson/nimbus/internal/db/generated"
 	"github.com/blakestevenson/nimbus/internal/downloader"
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
 
 // setupDownloaderRoutes registers the unified downloader API endpoints
-func setupDownloaderRoutes(r chi.Router, downloaderService *downloader.Service, logger *zap.Logger) {
+func setupDownloaderRoutes(r chi.Router, downloaderService *downloader.Service, queries *generated.Queries, configStore *configstore.Store, db *pgxpool.Pool, logger *zap.Logger) {
 	// List available downloaders
 	r.Get("/downloaders", func(w http.ResponseWriter, r *http.Request) {
 		downloaders := downloaderService.ListDownloaders()

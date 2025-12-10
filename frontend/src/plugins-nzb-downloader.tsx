@@ -1,1 +1,0 @@
-/Users/blakestevenson/repos/nimbus/plugins/nzb-downloader/web/main.tsx
