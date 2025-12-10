@@ -14,7 +14,9 @@ import (
 	"github.com/blakestevenson/nimbus/internal/indexer"
 	"github.com/blakestevenson/nimbus/internal/library"
 	"github.com/blakestevenson/nimbus/internal/media"
+	"github.com/blakestevenson/nimbus/internal/monitoring"
 	"github.com/blakestevenson/nimbus/internal/plugins"
+	"github.com/blakestevenson/nimbus/internal/quality"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -78,6 +80,17 @@ func NewRouter(
 		}
 	}
 
+	// Initialize quality service if db is available
+	var qualityService *quality.Service
+	var qualityHandler *quality.Handler
+	if db != nil {
+		if dbPool, ok := db.(*pgxpool.Pool); ok {
+			qualityService = quality.NewService(dbPool)
+			qualityHandler = quality.NewHandler(qualityService, logger)
+			logger.Info("Quality service initialized")
+		}
+	}
+
 	// Initialize downloader service if plugin manager is available
 	var downloaderService *downloader.Service
 	if pluginManager != nil && db != nil {
@@ -100,6 +113,25 @@ func NewRouter(
 		}
 	} else {
 		logger.Warn("pluginManager or db is nil", zap.Bool("pm_nil", pluginManager == nil), zap.Bool("db_nil", db == nil))
+	}
+
+	// Initialize monitoring service and scheduler if db is available
+	var monitoringService *monitoring.Service
+	var monitoringScheduler *monitoring.Scheduler
+	var monitoringHandler *monitoring.Handler
+	if db != nil {
+		if dbPool, ok := db.(*pgxpool.Pool); ok {
+			monitoringService = monitoring.NewService(dbPool)
+			monitoringScheduler = monitoring.NewScheduler(dbPool, monitoringService)
+			monitoringHandler = monitoring.NewHandler(monitoringService, monitoringScheduler, logger)
+
+			// Start the scheduler
+			if err := monitoringScheduler.Start(context.Background()); err != nil {
+				logger.Error("Failed to start monitoring scheduler", zap.Error(err))
+			} else {
+				logger.Info("Monitoring scheduler started")
+			}
+		}
 	}
 
 	// Health check
@@ -160,6 +192,59 @@ func NewRouter(
 			})
 			r.Get("/books", mediaHandler.ListBooks)
 		})
+
+		// Protected quality profile routes (require authentication)
+		if qualityHandler != nil {
+			r.Group(func(r chi.Router) {
+				r.Use(AuthMiddleware(authService, logger))
+
+				// Quality definitions (admin only)
+				r.Route("/quality/definitions", func(r chi.Router) {
+					r.Use(RequireAdminMiddleware(logger))
+					r.Get("/", qualityHandler.ListQualityDefinitions)
+					r.Post("/", qualityHandler.CreateQualityDefinition)
+					r.Get("/{id}", qualityHandler.GetQualityDefinition)
+					r.Put("/{id}", qualityHandler.UpdateQualityDefinition)
+					r.Delete("/{id}", qualityHandler.DeleteQualityDefinition)
+				})
+
+				// Quality profiles (all authenticated users can view, admin can modify)
+				r.Route("/quality/profiles", func(r chi.Router) {
+					r.Get("/", qualityHandler.ListQualityProfiles)
+					r.Get("/{id}", qualityHandler.GetQualityProfile)
+
+					// Admin-only profile modifications
+					r.Group(func(r chi.Router) {
+						r.Use(RequireAdminMiddleware(logger))
+						r.Post("/", qualityHandler.CreateQualityProfile)
+						r.Put("/{id}", qualityHandler.UpdateQualityProfile)
+						r.Delete("/{id}", qualityHandler.DeleteQualityProfile)
+					})
+				})
+
+				// Quality detection and utilities
+				r.Post("/quality/detect", qualityHandler.DetectQuality)
+
+				// Media quality routes
+				r.Get("/media/{mediaId}/quality", qualityHandler.GetMediaQuality)
+				r.Post("/media/{mediaId}/quality/profile", qualityHandler.AssignProfileToMedia)
+				r.Get("/media/{mediaId}/quality/upgrade", qualityHandler.CheckUpgrade)
+				r.Get("/media/{mediaId}/quality/history", qualityHandler.GetUpgradeHistory)
+
+				// Upgrade management
+				r.Get("/quality/upgrades", qualityHandler.ListMediaForUpgrade)
+			})
+		}
+
+		// Protected monitoring routes (require authentication)
+		if monitoringHandler != nil {
+			r.Group(func(r chi.Router) {
+				r.Use(AuthMiddleware(authService, logger))
+
+				// Setup monitoring routes
+				monitoring.SetupRoutes(r, monitoringHandler)
+			})
+		}
 
 		// Protected config routes (require authentication and admin)
 		r.Group(func(r chi.Router) {

@@ -29,10 +29,18 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  TrendingUp,
+  Check,
+  Ban,
 } from "lucide-react";
 import { useInteractiveSearch, type IndexerRelease } from "@/lib/api/media";
 import { useCreateDownload, useDownloaders } from "@/lib/api/downloads";
 import { useToast } from "@/hooks/use-toast";
+import {
+  useMediaQuality,
+  useDetectQuality,
+  useCheckUpgrade,
+} from "@/lib/api/quality";
 import { formatDistanceToNow } from "date-fns";
 
 interface InteractiveSearchDialogProps {
@@ -147,6 +155,10 @@ export function InteractiveSearchDialog({
 
   const { data: downloadersData } = useDownloaders();
   const createDownload = useCreateDownload();
+
+  // Quality profile integration
+  const { data: mediaQuality } = useMediaQuality(Number(mediaId));
+  const detectQuality = useDetectQuality();
 
   // Trigger search when dialog opens
   useEffect(() => {

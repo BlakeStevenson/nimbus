@@ -15,6 +15,8 @@ import SearchPage from "@/pages/SearchPage";
 import TMDBDetailPage from "@/pages/TMDBDetailPage";
 import DownloadsPage from "@/pages/DownloadsPage";
 import { DynamicPluginRoute } from "@/components/plugins/DynamicPluginRoute";
+import { QualityProfilesPage } from "@/pages/QualityProfilesPage";
+import MonitoringPage from "@/pages/MonitoringPage";
 
 export const router = createBrowserRouter([
   {
@@ -113,6 +115,14 @@ export const router = createBrowserRouter([
       {
         path: "config",
         element: <ConfigurationPage />,
+      },
+      {
+        path: "quality-profiles",
+        element: <QualityProfilesPage />,
+      },
+      {
+        path: "monitoring",
+        element: <MonitoringPage />,
       },
       {
         path: "plugins",

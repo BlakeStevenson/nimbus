@@ -11,6 +11,18 @@ import {
 } from "@/lib/api/media";
 import { useTVSeasonDetails } from "@/lib/api/tmdb";
 import { useDownloads } from "@/lib/api/downloads";
+import {
+  useQualityProfiles,
+  useMediaQuality,
+  useAssignProfileToMedia,
+  useQualityUpgradeHistory,
+} from "@/lib/api/quality";
+import {
+  useMonitoringRuleByMedia,
+  useCreateMonitoringRule,
+  useUpdateMonitoringRule,
+  useDeleteMonitoringRule,
+} from "@/lib/api/monitoring";
 import { MediaKindBadge } from "@/components/media/MediaKindBadge";
 import { MediaGrid } from "@/components/media/MediaGrid";
 import { MediaTable } from "@/components/media/MediaTable";
@@ -37,6 +49,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   ArrowLeft,
   Loader2,
   Pencil,
@@ -54,6 +73,12 @@ import {
   XCircle,
   Download,
   Search,
+  Award,
+  TrendingUp,
+  AlertCircle,
+  Activity,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   Table,
@@ -100,6 +125,19 @@ export function MediaDetailPage() {
   const updateMedia = useUpdateMedia(id!);
   const deleteFile = useDeleteMediaFile();
   const deleteMediaItem = useDeleteMediaItem();
+
+  // Quality profile management
+  const mediaIdNum = id ? parseInt(id) : 0;
+  const { data: qualityProfiles } = useQualityProfiles();
+  const { data: mediaQuality } = useMediaQuality(mediaIdNum);
+  const { data: upgradeHistory } = useQualityUpgradeHistory(mediaIdNum);
+  const assignProfile = useAssignProfileToMedia(mediaIdNum);
+
+  // Monitoring
+  const { data: monitoringRule } = useMonitoringRuleByMedia(mediaIdNum);
+  const createMonitoring = useCreateMonitoringRule();
+  const updateMonitoring = useUpdateMonitoringRule(monitoringRule?.id || 0);
+  const deleteMonitoring = useDeleteMonitoringRule();
 
   // For TV seasons, fetch TMDB episode data
   const seasonMetadata =
@@ -275,6 +313,54 @@ export function MediaDetailPage() {
     // Download is now handled by InteractiveSearchDialog
     // This callback is optional and just logs the selection
     console.log("Selected release:", release);
+  };
+
+  const handleAssignProfile = async (profileId: string) => {
+    try {
+      await assignProfile.mutateAsync({ profile_id: parseInt(profileId) });
+    } catch (error) {
+      console.error("Failed to assign quality profile:", error);
+    }
+  };
+
+  const handleToggleMonitoring = async () => {
+    try {
+      if (monitoringRule) {
+        await updateMonitoring.mutateAsync({
+          enabled: !monitoringRule.enabled,
+        });
+      } else {
+        // Create new monitoring rule with defaults
+        try {
+          await createMonitoring.mutateAsync({
+            media_item_id: mediaIdNum,
+            enabled: true,
+            quality_profile_id: mediaQuality?.profile_id || undefined,
+            monitor_mode: "all",
+            search_on_add: true,
+            automatic_search: true,
+            backlog_search: true,
+            prefer_season_packs: false,
+            minimum_seeders: 1,
+            tags: [],
+            search_interval_minutes: 60,
+          });
+        } catch (createError: any) {
+          // If rule already exists (race condition), reload to fetch it
+          if (
+            createError?.message?.includes("duplicate") ||
+            createError?.message?.includes("already exists")
+          ) {
+            window.location.reload();
+            return;
+          }
+          throw createError;
+        }
+      }
+    } catch (error) {
+      console.error("Failed to toggle monitoring:", error);
+      alert("Failed to update monitoring");
+    }
   };
 
   const formatFileSize = (bytes: number | null) => {
@@ -951,6 +1037,319 @@ export function MediaDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Quality Profile Section */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Award className="h-5 w-5" />
+                  Quality Profile
+                </CardTitle>
+                <CardDescription>
+                  Configure quality preferences and monitoring
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="quality-profile">Assigned Profile</Label>
+              <Select
+                value={mediaQuality?.profile_id?.toString() || ""}
+                onValueChange={handleAssignProfile}
+                disabled={assignProfile.isPending}
+              >
+                <SelectTrigger id="quality-profile">
+                  <SelectValue placeholder="Select quality profile" />
+                </SelectTrigger>
+                <SelectContent>
+                  {qualityProfiles?.map((profile) => (
+                    <SelectItem key={profile.id} value={profile.id.toString()}>
+                      {profile.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!mediaQuality && (
+                <p className="text-xs text-muted-foreground">
+                  No quality profile assigned yet. Select one to enable quality
+                  monitoring.
+                </p>
+              )}
+            </div>
+
+            {mediaQuality && mediaQuality.quality && (
+              <>
+                <div className="p-3 bg-muted rounded-lg space-y-2">
+                  <Label className="text-sm text-muted-foreground">
+                    Current Quality
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">
+                      {mediaQuality.quality.title}
+                    </Badge>
+                    {mediaQuality.quality.resolution && (
+                      <span className="text-sm text-muted-foreground">
+                        {mediaQuality.quality.resolution}p
+                      </span>
+                    )}
+                    {mediaQuality.quality.source && (
+                      <span className="text-sm text-muted-foreground">
+                        · {mediaQuality.quality.source}
+                      </span>
+                    )}
+                  </div>
+                  {(mediaQuality.codec_video || mediaQuality.codec_audio) && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {mediaQuality.codec_video && (
+                        <span>Video: {mediaQuality.codec_video}</span>
+                      )}
+                      {mediaQuality.codec_audio && (
+                        <span>Audio: {mediaQuality.codec_audio}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-4">
+                  {mediaQuality.cutoff_met ? (
+                    <div className="flex items-center gap-2 text-sm">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <span className="text-green-600">Cutoff met</span>
+                    </div>
+                  ) : mediaQuality.upgrade_allowed ? (
+                    <div className="flex items-center gap-2 text-sm">
+                      <TrendingUp className="h-4 w-4 text-blue-600" />
+                      <span className="text-blue-600">Upgrades allowed</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-sm">
+                      <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">
+                        Upgrades disabled
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Quality Upgrade History</CardTitle>
+            <CardDescription>
+              Track quality improvements over time
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {upgradeHistory && upgradeHistory.length > 0 ? (
+              <div className="space-y-3">
+                {upgradeHistory.slice(0, 5).map((upgrade) => (
+                  <div
+                    key={upgrade.id}
+                    className="p-3 bg-muted rounded-lg space-y-1"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {upgrade.old_quality && (
+                          <Badge variant="outline" className="text-xs">
+                            {upgrade.old_quality.title}
+                          </Badge>
+                        )}
+                        <span className="text-muted-foreground">→</span>
+                        {upgrade.new_quality && (
+                          <Badge variant="default" className="text-xs">
+                            {upgrade.new_quality.title}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    {upgrade.reason && (
+                      <p className="text-xs text-muted-foreground">
+                        {upgrade.reason}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(upgrade.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                ))}
+                {upgradeHistory.length > 5 && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    + {upgradeHistory.length - 5} more upgrades
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No quality upgrades recorded
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Monitoring Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5" />
+                Monitoring & Automation
+              </CardTitle>
+              <CardDescription>
+                Automatically search and download new releases
+              </CardDescription>
+            </div>
+            <Button
+              onClick={handleToggleMonitoring}
+              variant={monitoringRule?.enabled ? "default" : "outline"}
+              disabled={
+                createMonitoring.isPending || updateMonitoring.isPending
+              }
+            >
+              {createMonitoring.isPending || updateMonitoring.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {monitoringRule ? "Updating..." : "Enabling..."}
+                </>
+              ) : monitoringRule?.enabled ? (
+                <>
+                  <Eye className="mr-2 h-4 w-4" />
+                  Monitored
+                </>
+              ) : (
+                <>
+                  <EyeOff className="mr-2 h-4 w-4" />
+                  {monitoringRule ? "Disabled" : "Enable Monitoring"}
+                </>
+              )}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {monitoringRule ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-sm text-muted-foreground">
+                    Status
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    {monitoringRule.enabled ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-sm">Active</span>
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">
+                          Inactive
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-sm text-muted-foreground">
+                    Monitor Mode
+                  </Label>
+                  <Badge variant="secondary">
+                    {monitoringRule.monitor_mode}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 p-3 bg-muted rounded-lg">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">
+                    Searches
+                  </Label>
+                  <p className="text-lg font-semibold">
+                    {monitoringRule.search_count}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Found</Label>
+                  <p className="text-lg font-semibold">
+                    {monitoringRule.items_found_count}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">
+                    Grabbed
+                  </Label>
+                  <p className="text-lg font-semibold">
+                    {monitoringRule.items_grabbed_count}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm">
+                  {monitoringRule.automatic_search && (
+                    <Badge variant="outline" className="text-xs">
+                      Auto Search
+                    </Badge>
+                  )}
+                  {monitoringRule.backlog_search && (
+                    <Badge variant="outline" className="text-xs">
+                      Backlog
+                    </Badge>
+                  )}
+                  {monitoringRule.prefer_season_packs && (
+                    <Badge variant="outline" className="text-xs">
+                      Season Packs
+                    </Badge>
+                  )}
+                </div>
+                {monitoringRule.last_search_at && (
+                  <p className="text-xs text-muted-foreground">
+                    Last search:{" "}
+                    {new Date(monitoringRule.last_search_at).toLocaleString()}
+                  </p>
+                )}
+                {monitoringRule.next_search_at && monitoringRule.enabled && (
+                  <p className="text-xs text-muted-foreground">
+                    Next search:{" "}
+                    {new Date(monitoringRule.next_search_at).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-sm text-muted-foreground mb-3">
+                This media item is not being monitored. Enable monitoring to
+                automatically search for and download new releases.
+              </p>
+              <Button
+                onClick={handleToggleMonitoring}
+                disabled={createMonitoring.isPending}
+              >
+                {createMonitoring.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Enabling...
+                  </>
+                ) : (
+                  <>
+                    <Activity className="mr-2 h-4 w-4" />
+                    Enable Monitoring
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>

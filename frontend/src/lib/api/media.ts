@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPut, apiDelete, apiPost } from "../api-client";
+import { apiGet, apiPut, apiDelete } from "../api-client";
 import type {
   MediaItem,
   MediaListResponse,

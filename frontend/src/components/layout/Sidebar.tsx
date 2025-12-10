@@ -12,6 +12,8 @@ import {
   Scan,
   Search,
   Download,
+  Target,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -30,6 +32,7 @@ const coreNavItems: NavItem[] = [
   { label: "Dashboard", path: "/", icon: Home },
   { label: "Browse", path: "/browse", icon: Search },
   { label: "Downloads", path: "/downloads", icon: Download },
+  { label: "Monitoring", path: "/monitoring", icon: Activity },
   { label: "All", path: "/media", icon: Library, group: "Library" },
   { label: "Movies", path: "/media/movies", icon: Film, group: "Library" },
   { label: "TV Shows", path: "/media/tv", icon: Tv, group: "Library" },
@@ -137,6 +140,18 @@ export function Sidebar() {
                 >
                   <Scan className="h-4 w-4" />
                   Library Scanner
+                </Link>
+                <Link
+                  to="/quality-profiles"
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                    isActive("/quality-profiles")
+                      ? "bg-secondary text-secondary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  )}
+                >
+                  <Target className="h-4 w-4" />
+                  Quality Profiles
                 </Link>
                 <Link
                   to="/config"
