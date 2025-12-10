@@ -213,6 +213,31 @@ func NewRouter(
 			}
 		}
 
+		// Internal media query endpoint - for plugins to look up media items
+		r.Get("/internal/media", mediaHandler.ListMediaItems)
+
+		// Internal download sync endpoint - for plugins to sync download state to database
+		if downloaderService != nil {
+			r.Put("/internal/downloads/{id}", func(w http.ResponseWriter, r *http.Request) {
+				downloadID := chi.URLParam(r, "id")
+
+				var payload map[string]interface{}
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					http.Error(w, "Invalid request body", http.StatusBadRequest)
+					return
+				}
+
+				// Upsert download to database
+				if err := downloaderService.UpsertDownload(r.Context(), downloadID, payload); err != nil {
+					logger.Error("Failed to upsert download", zap.Error(err), zap.String("id", downloadID))
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				w.WriteHeader(http.StatusOK)
+			})
+		}
+
 		// Unified downloader routes (require authentication)
 		if downloaderService != nil {
 			r.Group(func(r chi.Router) {

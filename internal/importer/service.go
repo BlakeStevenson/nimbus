@@ -198,7 +198,24 @@ func (s *Service) importMovie(ctx context.Context, req *ImportRequest, config *I
 	if req.MediaItemID != nil {
 		// Update existing media item with final path
 		mediaItemID = req.MediaItemID
-		// TODO: Update media_files table with final path
+
+		// Create media_files entry for the imported file
+		fileSize, _ := s.getFileSize(finalPath)
+		_, err := s.queries.CreateMediaFile(ctx, generated.CreateMediaFileParams{
+			MediaItemID: req.MediaItemID,
+			Path:        finalPath,
+			Size:        &fileSize,
+			Hash:        nil, // TODO: Calculate hash if needed
+		})
+		if err != nil {
+			s.logger.Warn("failed to create media_files entry",
+				zap.String("path", finalPath),
+				zap.Error(err))
+		} else {
+			s.logger.Info("created media_files entry",
+				zap.String("path", finalPath),
+				zap.Int64("media_item_id", *req.MediaItemID))
+		}
 	} else {
 		// Create new media item via library service
 		fileSize, _ := s.getFileSize(finalPath)
@@ -308,6 +325,24 @@ func (s *Service) importTVEpisode(ctx context.Context, req *ImportRequest, confi
 	var mediaItemID *int64
 	if req.MediaItemID != nil {
 		mediaItemID = req.MediaItemID
+
+		// Create media_files entry for the imported file
+		fileSize, _ := s.getFileSize(finalPath)
+		_, err := s.queries.CreateMediaFile(ctx, generated.CreateMediaFileParams{
+			MediaItemID: req.MediaItemID,
+			Path:        finalPath,
+			Size:        &fileSize,
+			Hash:        nil, // TODO: Calculate hash if needed
+		})
+		if err != nil {
+			s.logger.Warn("failed to create media_files entry",
+				zap.String("path", finalPath),
+				zap.Error(err))
+		} else {
+			s.logger.Info("created media_files entry",
+				zap.String("path", finalPath),
+				zap.Int64("media_item_id", *req.MediaItemID))
+		}
 	} else {
 		fileSize, _ := s.getFileSize(finalPath)
 		parsed := &library.ParsedMedia{

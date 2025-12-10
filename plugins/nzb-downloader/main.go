@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -20,6 +22,8 @@ import (
 // NZBDownloaderPlugin implements the MediaSuitePlugin interface
 type NZBDownloaderPlugin struct {
 	downloadManager *DownloadManager
+	sdk             plugins.SDKInterface
+	sdkMu           sync.RWMutex
 }
 
 // Configuration keys
@@ -28,6 +32,7 @@ const (
 	configServers     = configPrefix + ".servers"
 	configDownloadDir = configPrefix + ".download_dir"
 	configConnections = configPrefix + ".connections"
+	configDownloads   = configPrefix + ".downloads" // Persisted download state
 )
 
 // NNTPServer represents an NNTP server configuration
@@ -148,6 +153,17 @@ func (p *NZBDownloaderPlugin) APIRoutes(ctx context.Context) ([]plugins.RouteDes
 
 // HandleAPI handles HTTP requests for this plugin's routes
 func (p *NZBDownloaderPlugin) HandleAPI(ctx context.Context, req *plugins.PluginHTTPRequest) (*plugins.PluginHTTPResponse, error) {
+	// Store SDK for later use if not already set
+	if req.SDK != nil {
+		p.sdkMu.Lock()
+		if p.sdk == nil {
+			p.sdk = req.SDK
+			// Load persisted downloads on first API call
+			go p.loadDownloads(context.Background(), req.SDK)
+		}
+		p.sdkMu.Unlock()
+	}
+
 	// Server management
 	if req.Path == "/api/plugins/nzb-downloader/servers" {
 		if req.Method == "GET" {
@@ -268,7 +284,7 @@ func (p *NZBDownloaderPlugin) handleCreateServer(ctx context.Context, req *plugi
 	}
 
 	if server.ID == "" {
-		server.ID = generateID(server.Name)
+		server.ID = generateID()
 	}
 
 	servers, err := p.getServers(ctx, req.SDK)
@@ -585,6 +601,11 @@ func (p *NZBDownloaderPlugin) handleDeleteDownload(ctx context.Context, req *plu
 	}
 	p.downloadManager.queue = newQueue
 
+	// Persist download state
+	if req.SDK != nil {
+		go p.saveDownloads(context.Background(), req.SDK)
+	}
+
 	return jsonResponse(http.StatusOK, map[string]string{"message": "Download deleted successfully"})
 }
 
@@ -793,9 +814,15 @@ func (p *NZBDownloaderPlugin) handleAddDownload(ctx context.Context, req *plugin
 		}
 	}
 
+	// Generate download ID
+	downloadID := generateID()
+
+	// Create a unique subdirectory for this download to avoid file conflicts
+	downloadDirStr = filepath.Join(downloadDirStr, downloadID)
+
 	// Create download with snapshot of servers and config
 	download := &Download{
-		ID:              generateID(downloadName),
+		ID:              downloadID,
 		Name:            downloadName,
 		Status:          "queued",
 		Progress:        0,
@@ -818,6 +845,11 @@ func (p *NZBDownloaderPlugin) handleAddDownload(ctx context.Context, req *plugin
 	p.downloadManager.mu.Unlock()
 
 	fmt.Fprintf(os.Stderr, "[NZB-DOWNLOADER] Download added to queue - ID: %s, Name: %s, Queue length: %d\n", download.ID, download.Name, queueLen)
+
+	// Persist download state
+	if req.SDK != nil {
+		go p.saveDownloads(context.Background(), req.SDK)
+	}
 
 	return jsonResponse(http.StatusCreated, download)
 }
@@ -930,6 +962,7 @@ func (p *NZBDownloaderPlugin) downloadNZB(ctx context.Context, download *Downloa
 	if len(download.Servers) == 0 {
 		download.Status = "failed"
 		download.Error = "No servers configured for this download"
+		p.persistDownloadState()
 		return
 	}
 
@@ -942,6 +975,7 @@ func (p *NZBDownloaderPlugin) downloadNZB(ctx context.Context, download *Downloa
 	if err := os.MkdirAll(downloadDirStr, 0755); err != nil {
 		download.Status = "failed"
 		download.Error = fmt.Sprintf("Failed to create download directory: %v", err)
+		p.persistDownloadState()
 		return
 	}
 
@@ -955,6 +989,7 @@ func (p *NZBDownloaderPlugin) downloadNZB(ctx context.Context, download *Downloa
 	if err != nil {
 		download.Status = "failed"
 		download.Error = fmt.Sprintf("Failed to create downloader: %v", err)
+		p.persistDownloadState()
 		return
 	}
 	defer downloader.Close()
@@ -973,6 +1008,7 @@ func (p *NZBDownloaderPlugin) downloadNZB(ctx context.Context, download *Downloa
 		download.Error = fmt.Sprintf("Download failed: %v", err)
 		// Clean up failed download files
 		p.cleanupFailedDownload(downloadDirStr, download)
+		p.persistDownloadState()
 		return
 	}
 
@@ -986,26 +1022,131 @@ func (p *NZBDownloaderPlugin) downloadNZB(ctx context.Context, download *Downloa
 	go func() {
 		// Post-process files (extraction, cleanup, etc.)
 		if err := downloader.PostProcess(downloadDirStr); err != nil {
-			download.AddLog(fmt.Sprintf("Post-processing encountered errors: %v", err))
+			download.AddLog(fmt.Sprintf("Post-processing failed: %v", err))
+			download.Status = "failed"
+			download.Error = fmt.Sprintf("Post-processing failed: %v", err)
+			p.persistDownloadState()
+			return
 		}
 
-		// Find the main media file after extraction
-		mainFile, err := findMainMediaFile(downloadDirStr)
-		if err != nil {
-			download.AddLog(fmt.Sprintf("WARNING: Could not find main media file: %v", err))
-			mainFile = downloadDirStr // Use directory as fallback
-		} else {
-			download.AddLog(fmt.Sprintf("Found main media file: %s", filepath.Base(mainFile)))
-		}
+		// Check if this is a season pack download
+		mediaKind, _ := download.Metadata["media_kind"].(string)
+		if mediaKind == "tv_season" {
+			// Find all episode files
+			episodeFiles, err := findAllMediaFiles(downloadDirStr)
+			if err != nil || len(episodeFiles) == 0 {
+				download.AddLog(fmt.Sprintf("ERROR: Could not find episode files: %v", err))
+				download.Status = "failed"
+				download.Error = fmt.Sprintf("Could not find episode files: %v", err)
+				return
+			} else if len(episodeFiles) == 1 {
+				// Single file marked as season pack - treat as single episode
+				download.AddLog("Detected single episode (misidentified as season pack)")
+				download.AddLog(fmt.Sprintf("Found episode file: %s", filepath.Base(episodeFiles[0])))
 
-		// Trigger import if we have media metadata
-		if download.Metadata != nil {
-			if shouldImport(download.Metadata) {
-				download.AddLog("Importing to library...")
-				if err := importToLibrary(download, mainFile); err != nil {
-					download.AddLog(fmt.Sprintf("Import failed: %v", err))
+				// Import using the media_id directly (it's actually an episode ID)
+				if _, ok := download.Metadata["media_id"]; ok {
+					if err := importToLibrary(download, episodeFiles[0]); err != nil {
+						download.AddLog(fmt.Sprintf("Import failed: %v", err))
+						download.Status = "failed"
+						download.Error = fmt.Sprintf("Import failed: %v", err)
+						return
+					} else {
+						download.AddLog("Import completed successfully")
+					}
 				} else {
-					download.AddLog("Import completed successfully")
+					download.AddLog("ERROR: No media_id found - cannot import")
+					download.Status = "failed"
+					download.Error = "No media_id found - cannot import"
+					return
+				}
+			} else {
+				// Multiple files - actual season pack
+				download.AddLog(fmt.Sprintf("Detected season pack, processing %d episodes...", len(episodeFiles)))
+
+				// Get the season media_id to query for episodes
+				seasonMediaID, _ := download.Metadata["media_id"]
+				if seasonMediaID == nil {
+					download.AddLog("ERROR: No media_id found for season - cannot import episodes")
+					download.Status = "failed"
+					download.Error = "No media_id found for season - cannot import episodes"
+					return
+				} else {
+					// Import each episode file
+					successCount := 0
+					failCount := 0
+
+					for _, file := range episodeFiles {
+						fileName := filepath.Base(file)
+						download.AddLog(fmt.Sprintf("Processing: %s", fileName))
+
+						// Parse season and episode from filename
+						season, episode, found := parseEpisodeFromFilename(fileName)
+						if !found {
+							download.AddLog(fmt.Sprintf("  Could not parse season/episode from filename, skipping"))
+							failCount++
+							continue
+						}
+
+						download.AddLog(fmt.Sprintf("  Detected S%02dE%02d", season, episode))
+
+						// Find the episode in the database
+						episodeMediaID, err := findEpisodeMediaID(seasonMediaID, season, episode)
+						if err != nil {
+							download.AddLog(fmt.Sprintf("  Could not find episode in database: %v", err))
+							failCount++
+							continue
+						}
+
+						download.AddLog(fmt.Sprintf("  Found episode media_id: %d", episodeMediaID))
+
+						// Import this episode
+						if err := importEpisodeFile(file, episodeMediaID); err != nil {
+							download.AddLog(fmt.Sprintf("  Import failed: %v", err))
+							failCount++
+						} else {
+							download.AddLog(fmt.Sprintf("  Import successful"))
+							successCount++
+						}
+					}
+
+					download.AddLog(fmt.Sprintf("Season pack import complete: %d succeeded, %d failed", successCount, failCount))
+
+					// If all imports failed, mark download as failed
+					if failCount > 0 && successCount == 0 {
+						download.AddLog("ERROR: All episode imports failed")
+						download.Status = "failed"
+						download.Error = fmt.Sprintf("All %d episode imports failed", failCount)
+						return
+					} else if failCount > 0 {
+						download.AddLog(fmt.Sprintf("WARNING: %d episode imports failed, but %d succeeded", failCount, successCount))
+					}
+				}
+			}
+		} else {
+			// Single episode download or movie
+			mainFile, err := findMainMediaFile(downloadDirStr)
+			if err != nil {
+				download.AddLog(fmt.Sprintf("ERROR: Could not find main media file: %v", err))
+				download.Status = "failed"
+				download.Error = fmt.Sprintf("Could not find main media file: %v", err)
+				return
+			} else {
+				download.AddLog(fmt.Sprintf("Found main media file: %s", filepath.Base(mainFile)))
+			}
+
+			// Trigger import if we have media metadata
+			if download.Metadata != nil {
+				if shouldImport(download.Metadata) {
+					download.AddLog("Importing to library...")
+					if err := importToLibrary(download, mainFile); err != nil {
+						download.AddLog(fmt.Sprintf("Import failed: %v", err))
+						download.Status = "failed"
+						download.Error = fmt.Sprintf("Import failed: %v", err)
+						return
+					} else {
+						download.AddLog("Import completed successfully")
+					}
 				}
 			}
 		}
@@ -1015,6 +1156,7 @@ func (p *NZBDownloaderPlugin) downloadNZB(ctx context.Context, download *Downloa
 		now := time.Now()
 		download.CompletedAt = &now
 		download.AddLog("Processing completed successfully")
+		p.persistDownloadState()
 	}()
 }
 
@@ -1170,21 +1312,210 @@ func (p *NZBDownloaderPlugin) saveServers(ctx context.Context, sdk plugins.SDKIn
 	return sdk.ConfigSet(ctx, configServers, servers)
 }
 
-func generateID(name string) string {
-	id := strings.ToLower(name)
-	id = strings.ReplaceAll(id, " ", "-")
-	id = strings.ReplaceAll(id, "_", "-")
-	allowed := "abcdefghijklmnopqrstuvwxyz0123456789-"
-	result := ""
-	for _, c := range id {
-		if strings.ContainsRune(allowed, c) {
-			result += string(c)
+// PersistedDownload is a simplified version of Download for storage (excludes runtime fields)
+type PersistedDownload struct {
+	ID              string                 `json:"id"`
+	Name            string                 `json:"name"`
+	Status          string                 `json:"status"`
+	Progress        float64                `json:"progress"`
+	TotalBytes      int64                  `json:"total_bytes"`
+	DownloadedBytes int64                  `json:"downloaded_bytes"`
+	URL             string                 `json:"url,omitempty"`
+	FileName        string                 `json:"file_name,omitempty"`
+	Priority        int                    `json:"priority"`
+	Metadata        map[string]interface{} `json:"metadata,omitempty"`
+	AddedAt         time.Time              `json:"added_at"`
+	StartedAt       *time.Time             `json:"started_at,omitempty"`
+	CompletedAt     *time.Time             `json:"completed_at,omitempty"`
+	Error           string                 `json:"error,omitempty"`
+}
+
+func (p *NZBDownloaderPlugin) saveDownloads(ctx context.Context, sdk plugins.SDKInterface) error {
+	p.downloadManager.mu.RLock()
+	defer p.downloadManager.mu.RUnlock()
+
+	// Convert downloads to persistable format
+	persistedDownloads := make([]PersistedDownload, 0, len(p.downloadManager.queue))
+	for _, id := range p.downloadManager.queue {
+		if dl, exists := p.downloadManager.downloads[id]; exists {
+			persistedDownloads = append(persistedDownloads, PersistedDownload{
+				ID:              dl.ID,
+				Name:            dl.Name,
+				Status:          dl.Status,
+				Progress:        dl.Progress,
+				TotalBytes:      dl.TotalBytes,
+				DownloadedBytes: dl.DownloadedBytes,
+				URL:             dl.URL,
+				FileName:        dl.FileName,
+				Priority:        dl.Priority,
+				Metadata:        dl.Metadata,
+				AddedAt:         dl.AddedAt,
+				StartedAt:       dl.StartedAt,
+				CompletedAt:     dl.CompletedAt,
+				Error:           dl.Error,
+			})
 		}
 	}
-	if result == "" {
-		result = fmt.Sprintf("item-%d", time.Now().Unix())
+
+	return sdk.ConfigSet(ctx, configDownloads, persistedDownloads)
+}
+
+func (p *NZBDownloaderPlugin) loadDownloads(ctx context.Context, sdk plugins.SDKInterface) error {
+	val, err := sdk.ConfigGet(ctx, configDownloads)
+	if err != nil {
+		return nil // No saved downloads
 	}
-	return result
+
+	if val == nil {
+		return nil
+	}
+
+	var persistedDownloads []PersistedDownload
+	switch v := val.(type) {
+	case []interface{}:
+		jsonData, _ := json.Marshal(v)
+		if err := json.Unmarshal(jsonData, &persistedDownloads); err != nil {
+			return err
+		}
+	case string:
+		if err := json.Unmarshal([]byte(v), &persistedDownloads); err != nil {
+			return err
+		}
+	default:
+		jsonData, _ := json.Marshal(v)
+		if err := json.Unmarshal(jsonData, &persistedDownloads); err != nil {
+			return err
+		}
+	}
+
+	// Restore downloads to manager (skip downloads that are actively downloading)
+	p.downloadManager.mu.Lock()
+	defer p.downloadManager.mu.Unlock()
+
+	for _, pd := range persistedDownloads {
+		// Reset downloading status to queued on restart
+		if pd.Status == "downloading" || pd.Status == "processing" {
+			pd.Status = "queued"
+			pd.Progress = 0
+			pd.DownloadedBytes = 0
+			pd.StartedAt = nil
+		}
+
+		download := &Download{
+			ID:              pd.ID,
+			Name:            pd.Name,
+			Status:          pd.Status,
+			Progress:        pd.Progress,
+			TotalBytes:      pd.TotalBytes,
+			DownloadedBytes: pd.DownloadedBytes,
+			URL:             pd.URL,
+			FileName:        pd.FileName,
+			Priority:        pd.Priority,
+			Metadata:        pd.Metadata,
+			AddedAt:         pd.AddedAt,
+			StartedAt:       pd.StartedAt,
+			CompletedAt:     pd.CompletedAt,
+			Error:           pd.Error,
+		}
+
+		p.downloadManager.downloads[download.ID] = download
+		p.downloadManager.queue = append(p.downloadManager.queue, download.ID)
+	}
+
+	return nil
+}
+
+// persistDownloadState saves download state to config store and PostgreSQL database (non-blocking)
+func (p *NZBDownloaderPlugin) persistDownloadState() {
+	p.sdkMu.RLock()
+	sdk := p.sdk
+	p.sdkMu.RUnlock()
+
+	if sdk != nil {
+		// Save to config store (for plugin internal state)
+		p.saveDownloads(context.Background(), sdk)
+
+		// Also sync to PostgreSQL database (for unified /api/downloads endpoint)
+		go p.syncDownloadsToDatabase()
+	}
+}
+
+// syncDownloadsToDatabase syncs all downloads to the PostgreSQL database via internal API
+func (p *NZBDownloaderPlugin) syncDownloadsToDatabase() {
+	p.downloadManager.mu.RLock()
+	downloads := make([]*Download, 0, len(p.downloadManager.queue))
+	for _, id := range p.downloadManager.queue {
+		if dl, exists := p.downloadManager.downloads[id]; exists {
+			downloads = append(downloads, dl)
+		}
+	}
+	p.downloadManager.mu.RUnlock()
+
+	// Sync each download to database via internal HTTP endpoint
+	for _, dl := range downloads {
+		p.syncDownloadToDatabase(dl)
+	}
+}
+
+// syncDownloadToDatabase syncs a single download to the PostgreSQL database
+func (p *NZBDownloaderPlugin) syncDownloadToDatabase(dl *Download) {
+	// Create request payload for unified downloads API
+	payload := map[string]interface{}{
+		"id":               dl.ID,
+		"plugin_id":        "nzb-downloader",
+		"name":             dl.Name,
+		"status":           dl.Status,
+		"progress":         dl.Progress,
+		"total_bytes":      dl.TotalBytes,
+		"downloaded_bytes": dl.DownloadedBytes,
+		"url":              dl.URL,
+		"file_name":        dl.FileName,
+		"error_message":    dl.Error,
+		"priority":         dl.Priority,
+		"metadata":         dl.Metadata,
+		"created_at":       dl.AddedAt,
+		"started_at":       dl.StartedAt,
+		"completed_at":     dl.CompletedAt,
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+
+	// Call internal sync endpoint (no auth required for internal calls)
+	req, err := http.NewRequest("PUT", fmt.Sprintf("http://localhost:8080/api/internal/downloads/%s", dl.ID), strings.NewReader(string(payloadBytes)))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+}
+
+func generateID() string {
+	// Generate a random 16-character alphanumeric ID using crypto/rand
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	const idLength = 16
+
+	b := make([]byte, idLength)
+	randomBytes := make([]byte, idLength)
+
+	if _, err := rand.Read(randomBytes); err != nil {
+		// Fallback to timestamp-based ID if random generation fails
+		return fmt.Sprintf("dl-%d", time.Now().UnixNano())
+	}
+
+	for i := range b {
+		b[i] = charset[int(randomBytes[i])%len(charset)]
+	}
+
+	return string(b)
 }
 
 func maskPassword(password string) string {
@@ -1210,6 +1541,45 @@ func jsonResponse(statusCode int, data interface{}) (*plugins.PluginHTTPResponse
 		},
 		Body: body,
 	}, nil
+}
+
+// findAllMediaFiles finds all media files in a directory
+func findAllMediaFiles(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory: %v", err)
+	}
+
+	var mediaFiles []string
+	mediaExtensions := []string{".mkv", ".mp4", ".avi", ".m4v", ".ts", ".m2ts", ".wmv", ".mov"}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		ext := strings.ToLower(filepath.Ext(name))
+
+		// Check if it's a media file
+		isMedia := false
+		for _, mediaExt := range mediaExtensions {
+			if ext == mediaExt {
+				isMedia = true
+				break
+			}
+		}
+
+		if isMedia {
+			mediaFiles = append(mediaFiles, filepath.Join(dir, name))
+		}
+	}
+
+	if len(mediaFiles) == 0 {
+		return nil, fmt.Errorf("no media files found in directory")
+	}
+
+	return mediaFiles, nil
 }
 
 // findMainMediaFile finds the largest media file in a directory
@@ -1289,6 +1659,121 @@ func shouldImport(metadata map[string]interface{}) bool {
 	return false
 }
 
+// parseEpisodeFromFilename extracts season and episode numbers from a filename
+// Supports patterns like: S01E01, s01e01, 1x01, etc.
+func parseEpisodeFromFilename(filename string) (season int, episode int, found bool) {
+	lowerName := strings.ToLower(filename)
+
+	// Pattern 1: S01E01 or s01e01
+	re := regexp.MustCompile(`s(\d+)e(\d+)`)
+	if matches := re.FindStringSubmatch(lowerName); len(matches) == 3 {
+		fmt.Sscanf(matches[1], "%d", &season)
+		fmt.Sscanf(matches[2], "%d", &episode)
+		return season, episode, true
+	}
+
+	// Pattern 2: 1x01
+	re = regexp.MustCompile(`(\d+)x(\d+)`)
+	if matches := re.FindStringSubmatch(lowerName); len(matches) == 3 {
+		fmt.Sscanf(matches[1], "%d", &season)
+		fmt.Sscanf(matches[2], "%d", &episode)
+		return season, episode, true
+	}
+
+	return 0, 0, false
+}
+
+// findEpisodeMediaID queries the Nimbus API to find the episode media_item_id
+func findEpisodeMediaID(seasonMediaID interface{}, season int, episode int) (int64, error) {
+	// Convert seasonMediaID to int64
+	var seasonID int64
+	switch v := seasonMediaID.(type) {
+	case int:
+		seasonID = int64(v)
+	case int64:
+		seasonID = v
+	case float64:
+		seasonID = int64(v)
+	case string:
+		parsed, err := fmt.Sscanf(v, "%d", &seasonID)
+		if err != nil || parsed != 1 {
+			return 0, fmt.Errorf("invalid season media_id format: %v", v)
+		}
+	default:
+		return 0, fmt.Errorf("unsupported season media_id type: %T", v)
+	}
+
+	// Query the internal API for episodes of this season (no auth required)
+	url := fmt.Sprintf("http://localhost:8080/api/internal/media?parent_id=%d&kind=tv_episode", seasonID)
+	resp, err := http.Get(url)
+	if err != nil {
+		return 0, fmt.Errorf("failed to query episodes: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return 0, fmt.Errorf("API returned error: %s", string(body))
+	}
+
+	var result struct {
+		Items []struct {
+			ID       int64                  `json:"id"`
+			Metadata map[string]interface{} `json:"metadata"`
+		} `json:"items"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	// Find the episode with matching season/episode numbers
+	for _, item := range result.Items {
+		if meta := item.Metadata; meta != nil {
+			itemSeason, _ := meta["season"].(float64)
+			itemEpisode, _ := meta["episode"].(float64)
+			if int(itemSeason) == season && int(itemEpisode) == episode {
+				return item.ID, nil
+			}
+		}
+	}
+
+	return 0, fmt.Errorf("episode S%02dE%02d not found in database", season, episode)
+}
+
+// importEpisodeFile imports a single episode file using the import API
+func importEpisodeFile(sourcePath string, mediaItemID int64) error {
+	importReq := map[string]interface{}{
+		"source_path":   sourcePath,
+		"media_item_id": mediaItemID,
+	}
+
+	reqBody, err := json.Marshal(importReq)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", "http://localhost:8080/api/downloads/import", strings.NewReader(string(reqBody)))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to call import API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("import API error: %s", string(body))
+	}
+
+	return nil
+}
+
 // importToLibrary calls the Nimbus import API to import completed download
 func importToLibrary(download *Download, sourcePath string) error {
 	// Build basic import request
@@ -1298,8 +1783,27 @@ func importToLibrary(download *Download, sourcePath string) error {
 
 	// If we have a media_item_id, that's all the backend needs to look up the details
 	if mediaID, ok := download.Metadata["media_id"]; ok {
-		importReq["media_item_id"] = mediaID
-		fmt.Fprintf(os.Stderr, "[NZB-DOWNLOADER] Importing with media_item_id: %v\n", mediaID)
+		// Convert media_id to int64 (it might be a string or float64 from JSON)
+		var mediaItemID int64
+		switch v := mediaID.(type) {
+		case int:
+			mediaItemID = int64(v)
+		case int64:
+			mediaItemID = v
+		case float64:
+			mediaItemID = int64(v)
+		case string:
+			// Try to parse string as int
+			parsed, err := fmt.Sscanf(v, "%d", &mediaItemID)
+			if err != nil || parsed != 1 {
+				return fmt.Errorf("invalid media_id format: %v", v)
+			}
+		default:
+			return fmt.Errorf("unsupported media_id type: %T", v)
+		}
+
+		importReq["media_item_id"] = mediaItemID
+		fmt.Fprintf(os.Stderr, "[NZB-DOWNLOADER] Importing with media_item_id: %d\n", mediaItemID)
 	} else {
 		// No media_item_id, skip import - we can't import without knowing what media item this is for
 		return fmt.Errorf("no media_item_id found in download metadata - cannot import")

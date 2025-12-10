@@ -8,8 +8,21 @@ import (
 
 // NZB represents the root element of an NZB file
 type NZB struct {
-	XMLName xml.Name  `xml:"nzb"`
-	Files   []NZBFile `xml:"file"`
+	XMLName  xml.Name  `xml:"nzb"`
+	Head     NZBHead   `xml:"head"`
+	Files    []NZBFile `xml:"file"`
+	Password string    `xml:"-"` // Extracted password from head metadata
+}
+
+// NZBHead represents the head section of an NZB file
+type NZBHead struct {
+	Meta []NZBMeta `xml:"meta"`
+}
+
+// NZBMeta represents a meta tag in the head section
+type NZBMeta struct {
+	Type  string `xml:"type,attr"`
+	Value string `xml:",chardata"`
 }
 
 // NZBFile represents a file in the NZB
@@ -214,6 +227,14 @@ func ParseNZB(r io.Reader) (*NZB, error) {
 
 	if err := decoder.Decode(&nzb); err != nil {
 		return nil, err
+	}
+
+	// Extract password from head metadata if present
+	for _, meta := range nzb.Head.Meta {
+		if meta.Type == "password" {
+			nzb.Password = strings.TrimSpace(meta.Value)
+			break
+		}
 	}
 
 	return &nzb, nil

@@ -74,6 +74,9 @@ export function MediaDetailPage() {
   const [fileToDelete, setFileToDelete] = useState<number | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchEpisodeId, setSearchEpisodeId] = useState<number | null>(null);
+  const [searchEpisodeTitle, setSearchEpisodeTitle] = useState<string | null>(
+    null,
+  );
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [editData, setEditData] = useState({
     title: "",
@@ -132,7 +135,7 @@ export function MediaDetailPage() {
       const existingEpisode = existingEpisodes.get(ep.episode_number);
       const hasFiles =
         existingEpisode && files
-          ? files.some((f) => f.media_id === existingEpisode.id)
+          ? files.some((f) => f.media_item_id === existingEpisode.id)
           : false;
 
       return {
@@ -753,6 +756,7 @@ export function MediaDetailPage() {
                           onClick={(e) => {
                             e.stopPropagation();
                             setSearchEpisodeId(episode.existingEpisode!.id);
+                            setSearchEpisodeTitle(episode.name);
                             setIsSearchOpen(true);
                           }}
                         >
@@ -1212,13 +1216,16 @@ export function MediaDetailPage() {
       {media && (
         <InteractiveSearchDialog
           mediaId={searchEpisodeId || id!}
-          mediaTitle={media.title}
-          mediaKind={media.kind}
+          mediaTitle={
+            searchEpisodeId ? searchEpisodeTitle || media.title : media.title
+          }
+          mediaKind={searchEpisodeId ? "tv_episode" : media.kind}
           open={isSearchOpen}
           onOpenChange={(open) => {
             setIsSearchOpen(open);
             if (!open) {
               setSearchEpisodeId(null);
+              setSearchEpisodeTitle(null);
             }
           }}
           onSelectRelease={handleSelectRelease}

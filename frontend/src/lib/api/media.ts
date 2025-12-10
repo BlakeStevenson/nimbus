@@ -153,6 +153,7 @@ export function useTMDBInLibrary(tmdbIds: number[]) {
 
 export interface MediaFile {
   id: number;
+  media_item_id: number | null;
   path: string;
   size: number | null;
   hash: string | null;

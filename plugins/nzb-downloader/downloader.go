@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -389,6 +389,168 @@ func (fd *FastDownloader) Download(download *Download, downloadDir string) error
 	return nil
 }
 
+// parseVolumeFromFilename attempts to extract volume number from filename
+// Supports patterns like: .part01.rar, .part001.rar, .r01, .001.rar
+// Returns 0-based index (0 for first volume), or -1 if not found
+func parseVolumeFromFilename(filename string) int {
+	filename = strings.ToLower(filename)
+
+	// Pattern 1: .partXX.rar or .partXXX.rar (most common for obfuscated)
+	re := regexp.MustCompile(`\.part(\d+)\.rar$`)
+	if matches := re.FindStringSubmatch(filename); len(matches) == 2 {
+		var num int
+		fmt.Sscanf(matches[1], "%d", &num)
+		if num > 0 {
+			return num - 1 // Convert to 0-based
+		}
+	}
+
+	// Pattern 2: .rXX (old RAR naming: .rar, .r00, .r01, .r02...)
+	re = regexp.MustCompile(`\.r(\d+)$`)
+	if matches := re.FindStringSubmatch(filename); len(matches) == 2 {
+		var num int
+		fmt.Sscanf(matches[1], "%d", &num)
+		return num + 1 // .r00 is second volume (first is .rar)
+	}
+
+	// Pattern 3: Check if it ends with .rar (could be first volume in old naming)
+	if strings.HasSuffix(filename, ".rar") && !strings.Contains(filename, ".part") {
+		// Could be first volume, but only if no other patterns match
+		// Return -1 to let other methods determine
+		return -1
+	}
+
+	return -1 // Could not determine from filename
+}
+
+// parseRARVolumeNumber extracts the volume number from a RAR file header
+// Returns 0 for first volume, 1 for second volume, etc.
+func parseRARVolumeNumber(header []byte, length int) int {
+	// RAR 5.0 format: starts with "Rar!\x1a\x07\x01\x00"
+	if length >= 8 && string(header[:7]) == "Rar!\x1a\x07\x01" {
+		return parseRAR5VolumeNumber(header, length)
+	}
+
+	// RAR 4.x format: starts with "Rar!\x1a\x07\x00"
+	// For older formats, fall back to checking common naming patterns or assume volume 1
+	return parseRAR4VolumeNumber(header, length)
+}
+
+// parseRAR5VolumeNumber parses volume number from RAR 5.0 format
+func parseRAR5VolumeNumber(header []byte, length int) int {
+	// RAR 5.0 header structure:
+	// 0-7: Signature "Rar!\x1a\x07\x01\x00"
+	// 8-11: Header CRC32 (4 bytes)
+	// 12+: Main archive header with vint fields
+
+	if length < 20 {
+		return 0 // Not enough data, assume first volume
+	}
+
+	pos := 12 // Start after signature (8 bytes) and CRC32 (4 bytes)
+
+	// Parse vint fields in sequence:
+	// 1. Header size
+	_, bytesRead := readVint(header[pos:])
+	pos += bytesRead
+
+	// 2. Header type (should be 1 for main archive header)
+	headerType, bytesRead := readVint(header[pos:])
+	pos += bytesRead
+	if headerType != 1 {
+		return 0 // Not a main archive header
+	}
+
+	// 3. Header flags
+	_, bytesRead = readVint(header[pos:])
+	pos += bytesRead
+
+	// 4. Extra area size (if header flags & 0x0001)
+	// We'll skip this check for simplicity since extra area is optional
+
+	// 5. Archive flags - this tells us if volume number field exists
+	archiveFlags, bytesRead := readVint(header[pos:])
+	pos += bytesRead
+
+	// Check if this is a multivolume archive (0x0001) and has volume number field (0x0002)
+	if archiveFlags&0x0001 == 0 {
+		return 0 // Not a multivolume archive
+	}
+
+	if archiveFlags&0x0002 == 0 {
+		return 0 // First volume (no volume number field)
+	}
+
+	// 6. Volume number field (present for all volumes except first)
+	// Value is 1 for second volume, 2 for third, etc.
+	if pos >= length {
+		return 0 // Not enough data
+	}
+
+	volumeNum, _ := readVint(header[pos:])
+	// RAR stores 1 for second volume, 2 for third, etc.
+	// We return 0-based: 0 for first, 1 for second, etc.
+	return int(volumeNum) + 1 // +1 because first volume is 0, but RAR starts counting at 1 for second volume
+}
+
+// parseRAR4VolumeNumber attempts to parse volume number from RAR 4.x format
+// This is more complex, so we use a simpler heuristic
+func parseRAR4VolumeNumber(header []byte, length int) int {
+	// RAR 4.x format is more complex and varies
+	// For now, check for the NEW_NUMBERING flag at offset 10
+	// and try to read volume number if present
+
+	if length < 13 {
+		return 0
+	}
+
+	// RAR 4.x: Check flags at offset 10-11
+	flags := uint16(header[10]) | (uint16(header[11]) << 8)
+
+	// 0x0100 = MHD_VOLUME (archive is part of multivolume set)
+	// 0x0001 = MHD_FIRSTVOLUME (first volume)
+	if flags&0x0100 == 0 {
+		return 0 // Not a multivolume archive
+	}
+
+	if flags&0x0001 != 0 {
+		return 0 // First volume
+	}
+
+	// For subsequent volumes in RAR 4.x, we can't easily extract the volume number
+	// without fully parsing the header. Return a fallback value.
+	// A better approach would be to look for ".partXX.rar" or ".rXX" in filename
+	return -1 // Indicates we couldn't determine volume number reliably
+}
+
+// readVint reads a variable-length integer from RAR 5.0 format
+// Returns the value and number of bytes read
+func readVint(data []byte) (uint64, int) {
+	if len(data) == 0 {
+		return 0, 0
+	}
+
+	var value uint64
+	var shift uint
+	bytesRead := 0
+
+	for i := 0; i < len(data) && i < 10; i++ { // Max 10 bytes for 64-bit int
+		b := data[i]
+		bytesRead++
+
+		// Lower 7 bits contain data
+		value |= uint64(b&0x7F) << shift
+		shift += 7
+
+		// Highest bit is continuation flag
+		if b&0x80 == 0 {
+			break // Last byte
+		}
+	}
+
+	return value, bytesRead
+}
+
 // PostProcess handles post-download processing like file detection and extraction
 // This is called separately after download completes to allow next download to start
 func (fd *FastDownloader) PostProcess(downloadDir string) error {
@@ -416,116 +578,187 @@ func (fd *FastDownloader) postProcess(files []string, downloadDir string) error 
 
 	fd.download.AddLog("Detecting file types and renaming...")
 
-	// Sort files by name to ensure proper order
-	sort.Strings(files)
-
-	// First pass: detect all RAR files and group them
-	type rarGroup struct {
-		baseName string
-		parts    map[int]string // part number -> filename
+	// First pass: detect all RAR files and determine their volume numbers
+	type rarFileInfo struct {
+		path        string
+		volumeIndex int // 0-based volume index (0 = first volume, 1 = second, etc.)
 	}
-	rarGroups := make(map[string]*rarGroup) // baseName -> group
+	rarFileInfos := []rarFileInfo{}
 
-	for _, file := range files {
+	for fileIdx, file := range files {
 		f, err := os.Open(file)
 		if err != nil {
 			continue
 		}
-		header := make([]byte, 16)
+
+		// Read enough of the header to detect RAR and get volume info
+		header := make([]byte, 512)
 		n, _ := f.Read(header)
 		f.Close()
 
 		if n >= 7 && (string(header[:6]) == "Rar!\x1a\x07" || string(header[:4]) == "Rar!") {
-			// This is a RAR file, extract base name and part number
-			baseName := filepath.Base(file)
-			partNum := 1
-			baseNameWithoutPart := baseName
+			// This is a RAR file
+			// Try multiple strategies to determine volume number (in order of reliability):
 
-			if idx := strings.Index(baseName, "-part"); idx != -1 {
-				baseNameWithoutPart = baseName[:idx]
-				fmt.Sscanf(baseName[idx+5:], "%d", &partNum)
+			// 1. Try to extract from filename (.partXX.rar, .rXX, .XX.rar patterns)
+			volumeIndex := parseVolumeFromFilename(filepath.Base(file))
+
+			// 2. If filename parsing failed, try header parsing
+			if volumeIndex < 0 {
+				volumeIndex = parseRARVolumeNumber(header, n)
 			}
 
-			if rarGroups[baseNameWithoutPart] == nil {
-				rarGroups[baseNameWithoutPart] = &rarGroup{
-					baseName: baseNameWithoutPart,
-					parts:    make(map[int]string),
-				}
+			// 3. If both failed, use file index as last resort (preserves NZB order)
+			if volumeIndex < 0 {
+				volumeIndex = fileIdx
+				fd.download.AddLog(fmt.Sprintf("Detected RAR file: %s (using NZB order: %d)", filepath.Base(file), volumeIndex+1))
+			} else {
+				fd.download.AddLog(fmt.Sprintf("Detected RAR file: %s (volume %d)", filepath.Base(file), volumeIndex+1))
 			}
-			rarGroups[baseNameWithoutPart].parts[partNum] = file
+
+			rarFileInfos = append(rarFileInfos, rarFileInfo{
+				path:        file,
+				volumeIndex: volumeIndex,
+			})
 		}
 	}
 
-	// Concatenate and rename RAR volumes if we have multiple parts
-	for baseName, group := range rarGroups {
-		if len(group.parts) > 1 {
-			fd.download.AddLog(fmt.Sprintf("Found %d RAR parts for %s, concatenating into volumes...", len(group.parts), baseName))
+	// Sort RAR files by volume index (parsed from header)
+	sort.Slice(rarFileInfos, func(i, j int) bool {
+		return rarFileInfos[i].volumeIndex < rarFileInfos[j].volumeIndex
+	})
 
-			// Sort part numbers
-			partNums := make([]int, 0, len(group.parts))
-			for partNum := range group.parts {
-				partNums = append(partNums, partNum)
-			}
-			sort.Ints(partNums)
-
-			// Concatenate all parts into a single RAR file
-			rarPath := filepath.Join(downloadDir, baseName+".rar")
-			outFile, err := os.Create(rarPath)
-			if err != nil {
-				fd.download.AddLog(fmt.Sprintf("ERROR: Failed to create concatenated RAR: %v", err))
-				continue
-			}
-
-			for _, partNum := range partNums {
-				partFile := group.parts[partNum]
-				fd.download.AddLog(fmt.Sprintf("Concatenating part%d...", partNum))
-
-				inFile, err := os.Open(partFile)
-				if err != nil {
-					fd.download.AddLog(fmt.Sprintf("ERROR: Failed to open part %d: %v", partNum, err))
-					outFile.Close()
-					os.Remove(rarPath)
-					continue
-				}
-
-				if _, err := io.Copy(outFile, inFile); err != nil {
-					fd.download.AddLog(fmt.Sprintf("ERROR: Failed to concatenate part %d: %v", partNum, err))
-					inFile.Close()
-					outFile.Close()
-					os.Remove(rarPath)
-					continue
-				}
-
-				inFile.Close()
-				os.Remove(partFile) // Remove the part file after concatenation
-			}
-
-			outFile.Close()
-			fd.download.AddLog(fmt.Sprintf("Created concatenated RAR: %s", filepath.Base(rarPath)))
-
-			// Update files list - remove all parts and add the concatenated file
-			newFiles := []string{}
-			for _, f := range files {
-				isPartFile := false
-				for _, partFile := range group.parts {
-					if f == partFile {
-						isPartFile = true
-						break
-					}
-				}
-				if !isPartFile {
-					newFiles = append(newFiles, f)
-				}
-			}
-			newFiles = append(newFiles, rarPath)
-			files = newFiles
-		}
+	// Extract just the paths in correct order
+	rarFiles := []string{}
+	for _, info := range rarFileInfos {
+		rarFiles = append(rarFiles, info.path)
 	}
 
-	// Detect file types and rename
-	renamedFiles := []string{}
+	// Track if we have RAR archive for extraction
 	var firstArchive string
 	archiveType := ""
+
+	// If we have multiple RAR files, rename them to proper volume naming for unrar
+	if len(rarFiles) > 1 {
+		fd.download.AddLog(fmt.Sprintf("Found %d RAR volumes, renaming for extraction...", len(rarFiles)))
+
+		// Determine base name from download name or first file
+		baseName := "archive"
+		if fd.download != nil && fd.download.Name != "" {
+			baseName = fd.download.Name
+		}
+
+		// Rename files to proper RAR volume naming (.part01.rar, .part02.rar, etc.)
+		renamedRarFiles := []string{}
+		renameFailed := false
+		for i, file := range rarFiles {
+			newName := filepath.Join(downloadDir, fmt.Sprintf("%s.part%02d.rar", baseName, i+1))
+			if err := os.Rename(file, newName); err != nil {
+				fd.download.AddLog(fmt.Sprintf("ERROR: Failed to rename RAR volume %d (%s -> %s): %v",
+					i+1, filepath.Base(file), filepath.Base(newName), err))
+				renameFailed = true
+				break
+			} else {
+				if i < 5 || i >= len(rarFiles)-5 {
+					// Log first 5 and last 5 to avoid spam
+					fd.download.AddLog(fmt.Sprintf("Renamed volume %d: %s", i+1, filepath.Base(newName)))
+				} else if i == 5 {
+					fd.download.AddLog(fmt.Sprintf("... renaming volumes 6-%d ...", len(rarFiles)-5))
+				}
+				renamedRarFiles = append(renamedRarFiles, newName)
+			}
+		}
+
+		if renameFailed {
+			return fmt.Errorf("failed to rename all RAR volumes for extraction")
+		}
+
+		// Verify all files were renamed
+		if len(renamedRarFiles) != len(rarFiles) {
+			return fmt.Errorf("only renamed %d of %d RAR volumes", len(renamedRarFiles), len(rarFiles))
+		}
+
+		// Set first archive for extraction
+		firstArchive = renamedRarFiles[0]
+		archiveType = "rar"
+
+		fd.download.AddLog(fmt.Sprintf("Successfully renamed all %d volumes, first volume: %s",
+			len(renamedRarFiles), filepath.Base(firstArchive)))
+
+		// Verify the first archive file exists before extraction
+		if _, err := os.Stat(firstArchive); os.IsNotExist(err) {
+			fd.download.AddLog(fmt.Sprintf("ERROR: First archive file missing after rename: %s", firstArchive))
+			// List what files DO exist in the directory
+			entries, _ := os.ReadDir(downloadDir)
+			fd.download.AddLog(fmt.Sprintf("Files in download dir (%d):", len(entries)))
+			for i, entry := range entries {
+				if i < 10 || i >= len(entries)-10 {
+					fd.download.AddLog(fmt.Sprintf("  %s", entry.Name()))
+				} else if i == 10 {
+					fd.download.AddLog(fmt.Sprintf("  ... %d more files ...", len(entries)-20))
+				}
+			}
+			return fmt.Errorf("first archive file not found after rename: %s", firstArchive)
+		}
+
+		fd.download.AddLog(fmt.Sprintf("Verified first volume exists: %s", firstArchive))
+
+		// Skip the file type detection for multi-volume RARs - we'll extract directly
+		fd.download.AddLog(fmt.Sprintf("Detected %s archive, extracting...", archiveType))
+
+		// Try extracting with common passwords
+		output, err := fd.extractRARWithPassword(firstArchive, downloadDir)
+		if err != nil {
+			fd.download.AddLog(fmt.Sprintf("Extraction failed: %v", err))
+
+			// Log full output for debugging (split into chunks if needed)
+			outputStr := string(output)
+			if len(outputStr) > 0 {
+				// Log in chunks of 500 characters
+				for i := 0; i < len(outputStr); i += 500 {
+					end := i + 500
+					if end > len(outputStr) {
+						end = len(outputStr)
+					}
+					fd.download.AddLog(fmt.Sprintf("unrar output [%d-%d]: %s", i, end, outputStr[i:end]))
+				}
+			}
+
+			if strings.Contains(outputStr, "previous volume") || strings.Contains(outputStr, "Unexpected end") {
+				fd.download.AddLog("Archive appears incomplete - missing volumes or damaged files")
+				return fmt.Errorf("archive extraction failed: incomplete archive - missing volumes or damaged files")
+			} else if strings.Contains(outputStr, "CRC failed") {
+				fd.download.AddLog("Archive is corrupted - CRC check failed")
+				return fmt.Errorf("archive extraction failed: CRC check failed - corrupted archive")
+			} else if strings.Contains(outputStr, "cannot find volume") {
+				fd.download.AddLog("Missing archive volumes - multipart archive is incomplete")
+				return fmt.Errorf("archive extraction failed: missing archive volumes")
+			}
+
+			// Generic extraction failure
+			return fmt.Errorf("archive extraction failed: %v", err)
+		}
+
+		fd.download.AddLog("Extraction complete")
+
+		// Clean up archive files and auxiliary files after successful extraction
+		fd.download.AddLog("Cleaning up archive and auxiliary files...")
+		for _, file := range renamedRarFiles {
+			os.Remove(file)
+		}
+
+		// Clean up auxiliary files
+		fd.cleanupAuxiliaryFiles(downloadDir)
+
+		return nil
+	} else if len(rarFiles) == 1 {
+		// Single RAR file, process normally
+		firstArchive = rarFiles[0]
+		archiveType = "rar"
+	}
+
+	// Detect file types and rename (for non-RAR files or single RAR)
+	renamedFiles := []string{}
 
 	for _, file := range files {
 		// Read file header to detect type
@@ -612,29 +845,49 @@ func (fd *FastDownloader) postProcess(files []string, downloadDir string) error 
 	fd.download.AddLog(fmt.Sprintf("Detected %s archive, extracting...", archiveType))
 
 	// Extract based on type
-	var cmd *exec.Cmd
+	var output []byte
+	var err error
 	switch archiveType {
 	case "rar":
-		cmd = exec.Command("unrar", "x", "-o+", "-y", firstArchive, downloadDir+"/")
+		output, err = fd.extractRARWithPassword(firstArchive, downloadDir)
 	case "zip":
-		cmd = exec.Command("unzip", "-o", firstArchive, "-d", downloadDir)
+		cmd := exec.Command("unzip", "-o", firstArchive, "-d", downloadDir)
+		output, err = cmd.CombinedOutput()
 	case "7z":
-		cmd = exec.Command("7z", "x", "-o"+downloadDir, "-y", firstArchive)
+		cmd := exec.Command("7z", "x", "-o"+downloadDir, "-y", firstArchive)
+		output, err = cmd.CombinedOutput()
 	default:
 		return nil
 	}
-
-	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fd.download.AddLog(fmt.Sprintf("Extraction failed: %v", err))
-		if strings.Contains(string(output), "previous volume") || strings.Contains(string(output), "Unexpected end") {
-			fd.download.AddLog("Archive appears incomplete - missing volumes or damaged files")
-			fd.download.AddLog("Check if PAR2 repair files are available, or manually extract")
-		} else {
-			fd.download.AddLog(fmt.Sprintf("Error details: %s", string(output)[:min(200, len(output))]))
+
+		// Log full output for debugging (split into chunks if needed)
+		outputStr := string(output)
+		if len(outputStr) > 0 {
+			// Log in chunks of 500 characters
+			for i := 0; i < len(outputStr); i += 500 {
+				end := i + 500
+				if end > len(outputStr) {
+					end = len(outputStr)
+				}
+				fd.download.AddLog(fmt.Sprintf("unrar output [%d-%d]: %s", i, end, outputStr[i:end]))
+			}
 		}
-		// Don't clean up files if extraction failed
-		return nil // Return nil so download still shows as completed
+
+		if strings.Contains(outputStr, "previous volume") || strings.Contains(outputStr, "Unexpected end") {
+			fd.download.AddLog("Archive appears incomplete - missing volumes or damaged files")
+			return fmt.Errorf("archive extraction failed: incomplete archive - missing volumes or damaged files")
+		} else if strings.Contains(outputStr, "CRC failed") {
+			fd.download.AddLog("Archive is corrupted - CRC check failed")
+			return fmt.Errorf("archive extraction failed: CRC check failed - corrupted archive")
+		} else if strings.Contains(outputStr, "cannot find volume") {
+			fd.download.AddLog("Missing archive volumes - multipart archive is incomplete")
+			return fmt.Errorf("archive extraction failed: missing archive volumes")
+		}
+
+		// Generic extraction failure
+		return fmt.Errorf("archive extraction failed: %v", err)
 	}
 
 	fd.download.AddLog("Extraction complete")
@@ -649,6 +902,104 @@ func (fd *FastDownloader) postProcess(files []string, downloadDir string) error 
 	fd.cleanupAuxiliaryFiles(downloadDir)
 
 	return nil
+}
+
+// extractRARWithPassword attempts to extract a RAR file, trying common passwords
+func (fd *FastDownloader) extractRARWithPassword(rarFile, destDir string) ([]byte, error) {
+	// Build list of passwords to try
+	passwords := []string{}
+
+	// First priority: password from NZB file metadata
+	if fd.download.NZBData != nil && fd.download.NZBData.Password != "" {
+		passwords = append(passwords, fd.download.NZBData.Password)
+		fd.download.AddLog(fmt.Sprintf("Found password in NZB metadata: %s", fd.download.NZBData.Password))
+	}
+
+	// Second priority: try without password
+	passwords = append(passwords, "")
+
+	// Third priority: common scene/indexer passwords
+	if fd.download.Metadata != nil {
+		// Try indexer name
+		if indexerName, ok := fd.download.Metadata["indexer_name"].(string); ok && indexerName != "" {
+			passwords = append(passwords, indexerName)
+			passwords = append(passwords, strings.ToLower(indexerName))
+		}
+
+		// Try indexer ID
+		if indexerID, ok := fd.download.Metadata["indexer_id"].(string); ok && indexerID != "" {
+			passwords = append(passwords, indexerID)
+			passwords = append(passwords, strings.ToLower(indexerID))
+		}
+	}
+
+	// Extract release group from download name (usually at the end after a dash)
+	if fd.download.Name != "" {
+		parts := strings.Split(fd.download.Name, "-")
+		if len(parts) > 1 {
+			releaseGroup := strings.TrimSpace(parts[len(parts)-1])
+			passwords = append(passwords, releaseGroup)
+			passwords = append(passwords, strings.ToLower(releaseGroup))
+		}
+	}
+
+	// Common generic passwords
+	commonPasswords := []string{
+		"nzbgeek", "dognzb", "nzbsu", "nzbfinder",
+		"password", "usenet", "scene",
+	}
+	passwords = append(passwords, commonPasswords...)
+
+	// Try each password
+	var lastOutput []byte
+	var lastErr error
+
+	for i, password := range passwords {
+		if i == 0 {
+			fd.download.AddLog("Attempting extraction without password...")
+		} else {
+			fd.download.AddLog(fmt.Sprintf("Trying password: %s", password))
+		}
+
+		// Build unrar command with password
+		args := []string{"x", "-o+", "-y"}
+		if password != "" {
+			args = append(args, fmt.Sprintf("-p%s", password))
+		} else {
+			args = append(args, "-p-") // -p- means no password
+		}
+		args = append(args, rarFile, destDir+"/")
+
+		cmd := exec.Command("unrar", args...)
+		output, err := cmd.CombinedOutput()
+
+		lastOutput = output
+		lastErr = err
+
+		if err == nil {
+			// Success!
+			if password != "" {
+				fd.download.AddLog(fmt.Sprintf("Successfully extracted with password: %s", password))
+			} else {
+				fd.download.AddLog("Successfully extracted (no password)")
+			}
+			return output, nil
+		}
+
+		// Check if error is password-related
+		outputStr := string(output)
+		if !strings.Contains(outputStr, "password") &&
+			!strings.Contains(outputStr, "encrypted") &&
+			!strings.Contains(outputStr, "Enter password") {
+			// Error is not password-related, stop trying
+			fd.download.AddLog("Extraction error is not password-related, stopping password attempts")
+			break
+		}
+	}
+
+	// All passwords failed
+	fd.download.AddLog(fmt.Sprintf("Failed to extract after trying %d password(s)", len(passwords)))
+	return lastOutput, lastErr
 }
 
 // cleanupAuxiliaryFiles removes common auxiliary files (.nfo, .sfv, .bin, samples, etc.)

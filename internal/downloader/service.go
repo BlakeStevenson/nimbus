@@ -447,6 +447,60 @@ func (s *Service) syncDownloadFromPlugin(ctx context.Context, pluginID string, d
 	return s.saveDownloadToDB(ctx, &download, nil)
 }
 
+// UpsertDownload inserts or updates a download in the database (used by plugins to sync state)
+func (s *Service) UpsertDownload(ctx context.Context, downloadID string, payload map[string]interface{}) error {
+	// Extract fields from payload
+	pluginID, _ := payload["plugin_id"].(string)
+	name, _ := payload["name"].(string)
+	status, _ := payload["status"].(string)
+	progress, _ := payload["progress"].(float64)
+	totalBytes, _ := payload["total_bytes"].(float64)
+	downloadedBytes, _ := payload["downloaded_bytes"].(float64)
+	url, _ := payload["url"].(string)
+	fileName, _ := payload["file_name"].(string)
+	errorMessage, _ := payload["error_message"].(string)
+	priority, _ := payload["priority"].(float64)
+
+	// Convert metadata to JSON
+	var metadataJSON []byte
+	if metadata, ok := payload["metadata"].(map[string]interface{}); ok {
+		metadataJSON, _ = json.Marshal(metadata)
+	}
+
+	// Upsert query
+	query := `
+		INSERT INTO downloads (
+			id, plugin_id, name, status, progress, total_bytes, downloaded_bytes,
+			url, file_name, error_message, priority, metadata, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13, NOW()), NOW())
+		ON CONFLICT (id) DO UPDATE SET
+			status = EXCLUDED.status,
+			progress = EXCLUDED.progress,
+			downloaded_bytes = EXCLUDED.downloaded_bytes,
+			error_message = EXCLUDED.error_message,
+			updated_at = NOW(),
+			started_at = CASE WHEN downloads.started_at IS NULL AND EXCLUDED.status = 'downloading'
+			                  THEN NOW() ELSE downloads.started_at END,
+			completed_at = CASE WHEN EXCLUDED.status IN ('completed', 'failed')
+			                    THEN COALESCE($14, NOW()) ELSE downloads.completed_at END
+	`
+
+	var createdAt, completedAt interface{}
+	if ca, ok := payload["created_at"]; ok {
+		createdAt = ca
+	}
+	if ca, ok := payload["completed_at"]; ok {
+		completedAt = ca
+	}
+
+	_, err := s.db.Exec(ctx, query,
+		downloadID, pluginID, name, status, progress, int64(totalBytes), int64(downloadedBytes),
+		url, fileName, errorMessage, int(priority), metadataJSON, createdAt, completedAt,
+	)
+
+	return err
+}
+
 // ListDownloads retrieves all downloads from the database, syncing with plugins for active downloads
 func (s *Service) ListDownloads(ctx context.Context, pluginID string, status string) (*DownloadResponse, error) {
 	// Build query with optional filters

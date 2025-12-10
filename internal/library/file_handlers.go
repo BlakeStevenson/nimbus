@@ -49,6 +49,7 @@ func (h *FileHandler) GetMediaFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get files for this media item
 	files, err := h.queries.ListMediaFilesByItem(ctx, &mediaID)
 	if err != nil {
 		h.logger.Error("failed to get media files", zap.Error(err))
@@ -56,25 +57,47 @@ func (h *FileHandler) GetMediaFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Also get files for child items (e.g., episodes in a season)
+	// First get the media item to check its kind
+	mediaItem, err := h.queries.GetMediaItem(ctx, mediaID)
+	if err == nil && mediaItem.Kind == "tv_season" {
+		// Get all children (episodes)
+		children, err := h.queries.ListMediaItems(ctx, generated.ListMediaItemsParams{
+			ParentID: &mediaID,
+		})
+		if err == nil {
+			// Get files for each child episode
+			for _, child := range children {
+				childID := child.ID
+				childFiles, err := h.queries.ListMediaFilesByItem(ctx, &childID)
+				if err == nil {
+					files = append(files, childFiles...)
+				}
+			}
+		}
+	}
+
 	// Convert to response format
 	type FileResponse struct {
-		ID        int64   `json:"id"`
-		Path      string  `json:"path"`
-		Size      *int64  `json:"size"`
-		Hash      *string `json:"hash"`
-		CreatedAt string  `json:"created_at"`
-		UpdatedAt string  `json:"updated_at"`
+		ID          int64   `json:"id"`
+		MediaItemID *int64  `json:"media_item_id"`
+		Path        string  `json:"path"`
+		Size        *int64  `json:"size"`
+		Hash        *string `json:"hash"`
+		CreatedAt   string  `json:"created_at"`
+		UpdatedAt   string  `json:"updated_at"`
 	}
 
 	response := make([]FileResponse, len(files))
 	for i, file := range files {
 		response[i] = FileResponse{
-			ID:        file.ID,
-			Path:      file.Path,
-			Size:      file.Size,
-			Hash:      file.Hash,
-			CreatedAt: file.CreatedAt.Time.Format("2006-01-02T15:04:05Z07:00"),
-			UpdatedAt: file.UpdatedAt.Time.Format("2006-01-02T15:04:05Z07:00"),
+			ID:          file.ID,
+			MediaItemID: file.MediaItemID,
+			Path:        file.Path,
+			Size:        file.Size,
+			Hash:        file.Hash,
+			CreatedAt:   file.CreatedAt.Time.Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedAt:   file.UpdatedAt.Time.Format("2006-01-02T15:04:05Z07:00"),
 		}
 	}
 
