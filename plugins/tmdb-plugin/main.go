@@ -798,6 +798,11 @@ func (p *TMDBPlugin) Search(ctx context.Context, req *plugins.IndexerSearchReque
 	return nil, fmt.Errorf("TMDB plugin does not support search")
 }
 
+// IsDownloader returns false as TMDB is not a downloader plugin
+func (p *TMDBPlugin) IsDownloader(ctx context.Context) (bool, error) {
+	return false, nil
+}
+
 // Helper functions
 
 // getAPIKey fetches the TMDB API key from the Nimbus config table

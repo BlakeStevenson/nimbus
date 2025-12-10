@@ -111,7 +111,7 @@ func main() {
 	}
 
 	// Initialize HTTP router
-	router := httpserver.NewRouter(mediaService, authService, configStore, queries, libraryRootPath, pluginManager, logger)
+	router := httpserver.NewRouter(mediaService, authService, configStore, queries, dbPool, libraryRootPath, pluginManager, logger)
 
 	// Create HTTP server
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)

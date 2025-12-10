@@ -244,9 +244,9 @@ export function MediaDetailPage() {
   };
 
   const handleSelectRelease = (release: IndexerRelease) => {
-    // TODO: Integrate with download handler (e.g., send to nzb-downloader plugin)
+    // Download is now handled by InteractiveSearchDialog
+    // This callback is optional and just logs the selection
     console.log("Selected release:", release);
-    alert(`Selected: ${release.title}\n\nDownload integration coming soon!`);
   };
 
   const formatFileSize = (bytes: number | null) => {

@@ -220,6 +220,19 @@ func (s *GRPCServer) IsIndexer(ctx context.Context, req *proto.IsIndexerRequest)
 	return &proto.IsIndexerResponse{IsIndexer: isIndexer}, nil
 }
 
+// IsDownloader implements the IsDownloader RPC
+func (s *GRPCServer) IsDownloader(ctx context.Context, req *proto.IsDownloaderRequest) (*proto.IsDownloaderResponse, error) {
+	isDownloader, err := s.Impl.IsDownloader(ctx)
+	if err != nil {
+		return &proto.IsDownloaderResponse{
+			IsDownloader: false,
+			Error:        err.Error(),
+		}, nil
+	}
+
+	return &proto.IsDownloaderResponse{IsDownloader: isDownloader}, nil
+}
+
 // Search implements the Search RPC
 func (s *GRPCServer) Search(ctx context.Context, req *proto.IndexerSearchRequest) (*proto.IndexerSearchResponse, error) {
 	// Convert proto request to plugin request
@@ -441,6 +454,20 @@ func (c *GRPCClient) IsIndexer(ctx context.Context) (bool, error) {
 	}
 
 	return resp.IsIndexer, nil
+}
+
+// IsDownloader calls the plugin's IsDownloader method
+func (c *GRPCClient) IsDownloader(ctx context.Context) (bool, error) {
+	resp, err := c.client.IsDownloader(ctx, &proto.IsDownloaderRequest{})
+	if err != nil {
+		return false, err
+	}
+
+	if resp.Error != "" {
+		return false, fmt.Errorf("plugin error: %s", resp.Error)
+	}
+
+	return resp.IsDownloader, nil
 }
 
 // Search calls the plugin's Search method

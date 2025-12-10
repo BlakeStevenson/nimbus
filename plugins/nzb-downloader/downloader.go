@@ -107,12 +107,20 @@ func NewFastDownloader(ctx context.Context, server NNTPServer, download *Downloa
 	if len(fd.connPool) == 0 {
 		download.AddLog("Failed to establish any NNTP connections")
 		cancel()
+		// Clean up any partial resources
+		close(fd.jobQueue)
+		close(fd.resultQueue)
 		return nil, fmt.Errorf("failed to establish any NNTP connections")
 	}
 
 	download.AddLog(fmt.Sprintf("Created %d/%d connections successfully", len(fd.connPool), numConnections))
 
-	// Start workers
+	// If we have fewer connections than requested, that's okay but log it
+	if len(fd.connPool) < numConnections {
+		download.AddLog(fmt.Sprintf("WARNING: Only %d/%d connections available, continuing with reduced capacity", len(fd.connPool), numConnections))
+	}
+
+	// Start workers (one per connection)
 	for i := 0; i < len(fd.connPool); i++ {
 		fd.wg.Add(1)
 		go fd.worker(i, fd.connPool[i])
@@ -680,16 +688,38 @@ func (fd *FastDownloader) cleanupAuxiliaryFiles(downloadDir string) {
 
 // Close closes the downloader and all connections
 func (fd *FastDownloader) Close() {
+	// Cancel context first to signal workers to stop
 	fd.cancel()
+
+	// Close job queue to prevent new jobs
 	close(fd.jobQueue)
 
-	// Wait for workers to finish
-	fd.wg.Wait()
+	// Wait for workers to finish with a timeout
+	done := make(chan struct{})
+	go func() {
+		fd.wg.Wait()
+		close(done)
+	}()
 
-	// Close all connections
-	for _, conn := range fd.connPool {
-		conn.Close()
+	select {
+	case <-done:
+		// Workers finished normally
+	case <-time.After(5 * time.Second):
+		// Workers didn't finish in time, force close
+		fd.download.AddLog("WARNING: Forcing connection closure after timeout")
 	}
+
+	// Close all connections regardless
+	for i, conn := range fd.connPool {
+		if conn != nil {
+			if err := conn.Close(); err != nil {
+				fd.download.AddLog(fmt.Sprintf("Error closing connection %d: %v", i, err))
+			}
+		}
+	}
+
+	// Clear the connection pool
+	fd.connPool = nil
 }
 
 // FileAssembler handles writing segments to a file in order

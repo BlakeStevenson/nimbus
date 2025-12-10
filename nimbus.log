@@ -1,0 +1,89 @@
+2025-12-09T22:49:52.428-0600	INFO	server/main.go:46	Starting Nimbus server	{"environment": "development", "host": "0.0.0.0", "port": 8080}
+2025-12-09T22:49:52.478-0600	INFO	db/db.go:33	database connection established	{"max_conns": 25, "min_conns": 5}
+2025-12-09T22:49:52.478-0600	INFO	server/main.go:59	Connected to database
+2025-12-09T22:49:52.481-0600	INFO	plugins/manager.go:72	Initializing plugin manager	{"component": "plugin-manager", "plugins_dir": "/Users/blakestevenson/repos/nimbus/plugins"}
+2025-12-09T22:49:52.481-0600	INFO	plugins/manager.go:85	Discovered plugins	{"component": "plugin-manager", "count": 4}
+2025-12-09T22:49:52.484-0600	INFO	plugins/manager.go:308	Starting plugin process	{"component": "plugin-manager", "plugin_id": "example-plugin", "executable": "/Users/blakestevenson/repos/nimbus/plugins/example-plugin/example-plugin"}
+2025-12-09T22:49:52.485-0600 [DEBUG] plugin: starting plugin: path=/Users/blakestevenson/repos/nimbus/plugins/example-plugin/example-plugin args=[/Users/blakestevenson/repos/nimbus/plugins/example-plugin/example-plugin]
+2025-12-09T22:49:52.487-0600 [DEBUG] plugin: plugin started: path=/Users/blakestevenson/repos/nimbus/plugins/example-plugin/example-plugin pid=4331
+2025-12-09T22:49:52.487-0600 [DEBUG] plugin: waiting for RPC address: plugin=/Users/blakestevenson/repos/nimbus/plugins/example-plugin/example-plugin
+2025-12-09T22:49:52.497-0600 [DEBUG] plugin: using plugin: version=1
+2025-12-09T22:49:52.498-0600 [DEBUG] plugin.example-plugin: plugin address: address=/var/folders/kz/r_wq_mzn41g4nvhr8xyr8m640000gn/T/plugin2094158575 network=unix timestamp=2025-12-09T22:49:52.497-0600
+2025-12-09T22:49:52.498-0600 [TRACE] plugin.stdio: waiting for stdio data
+2025-12-09T22:49:52.500-0600	INFO	plugins/manager.go:395	Plugin loaded successfully	{"component": "plugin-manager", "plugin_id": "example-plugin", "plugin_name": "Example Plugin", "version": "0.1.0", "routes": 2, "is_indexer": false, "is_downloader": false}
+2025-12-09T22:49:52.500-0600	INFO	plugins/manager.go:308	Starting plugin process	{"component": "plugin-manager", "plugin_id": "nzb-downloader", "executable": "/Users/blakestevenson/repos/nimbus/plugins/nzb-downloader/nzb-downloader"}
+2025-12-09T22:49:52.500-0600 [DEBUG] plugin: starting plugin: path=/Users/blakestevenson/repos/nimbus/plugins/nzb-downloader/nzb-downloader args=[/Users/blakestevenson/repos/nimbus/plugins/nzb-downloader/nzb-downloader]
+2025-12-09T22:49:52.502-0600 [DEBUG] plugin: plugin started: path=/Users/blakestevenson/repos/nimbus/plugins/nzb-downloader/nzb-downloader pid=4332
+2025-12-09T22:49:52.502-0600 [DEBUG] plugin: waiting for RPC address: plugin=/Users/blakestevenson/repos/nimbus/plugins/nzb-downloader/nzb-downloader
+2025-12-09T22:49:52.510-0600 [DEBUG] plugin.nzb-downloader: [NZB-DOWNLOADER] Queue processor started
+2025-12-09T22:49:52.510-0600 [DEBUG] plugin: using plugin: version=1
+2025-12-09T22:49:52.510-0600 [DEBUG] plugin.nzb-downloader: plugin address: address=/var/folders/kz/r_wq_mzn41g4nvhr8xyr8m640000gn/T/plugin237986529 network=unix timestamp=2025-12-09T22:49:52.510-0600
+2025-12-09T22:49:52.511-0600 [TRACE] plugin.stdio: waiting for stdio data
+2025-12-09T22:49:52.512-0600	INFO	plugins/manager.go:395	Plugin loaded successfully	{"component": "plugin-manager", "plugin_id": "nzb-downloader", "plugin_name": "NZB Downloader", "version": "0.1.0", "routes": 15, "is_indexer": false, "is_downloader": true}
+2025-12-09T22:49:52.512-0600	INFO	plugins/manager.go:308	Starting plugin process	{"component": "plugin-manager", "plugin_id": "tmdb-plugin", "executable": "/Users/blakestevenson/repos/nimbus/plugins/tmdb-plugin/tmdb-plugin"}
+2025-12-09T22:49:52.512-0600 [DEBUG] plugin: starting plugin: path=/Users/blakestevenson/repos/nimbus/plugins/tmdb-plugin/tmdb-plugin args=[/Users/blakestevenson/repos/nimbus/plugins/tmdb-plugin/tmdb-plugin]
+2025-12-09T22:49:52.513-0600 [DEBUG] plugin: plugin started: path=/Users/blakestevenson/repos/nimbus/plugins/tmdb-plugin/tmdb-plugin pid=4333
+2025-12-09T22:49:52.513-0600 [DEBUG] plugin: waiting for RPC address: plugin=/Users/blakestevenson/repos/nimbus/plugins/tmdb-plugin/tmdb-plugin
+2025-12-09T22:49:52.521-0600 [DEBUG] plugin: using plugin: version=1
+2025-12-09T22:49:52.521-0600 [DEBUG] plugin.tmdb-plugin: plugin address: address=/var/folders/kz/r_wq_mzn41g4nvhr8xyr8m640000gn/T/plugin3236412901 network=unix timestamp=2025-12-09T22:49:52.521-0600
+2025-12-09T22:49:52.521-0600 [TRACE] plugin.stdio: waiting for stdio data
+2025-12-09T22:49:52.522-0600	INFO	plugins/manager.go:395	Plugin loaded successfully	{"component": "plugin-manager", "plugin_id": "tmdb-plugin", "plugin_name": "The Movie Database (TMDB)", "version": "0.1.0", "routes": 8, "is_indexer": false, "is_downloader": false}
+2025-12-09T22:49:52.522-0600	INFO	plugins/manager.go:308	Starting plugin process	{"component": "plugin-manager", "plugin_id": "usenet-indexer", "executable": "/Users/blakestevenson/repos/nimbus/plugins/usenet-indexer/usenet-indexer"}
+2025-12-09T22:49:52.522-0600 [DEBUG] plugin: starting plugin: path=/Users/blakestevenson/repos/nimbus/plugins/usenet-indexer/usenet-indexer args=[/Users/blakestevenson/repos/nimbus/plugins/usenet-indexer/usenet-indexer]
+2025-12-09T22:49:52.523-0600 [DEBUG] plugin: plugin started: path=/Users/blakestevenson/repos/nimbus/plugins/usenet-indexer/usenet-indexer pid=4334
+2025-12-09T22:49:52.523-0600 [DEBUG] plugin: waiting for RPC address: plugin=/Users/blakestevenson/repos/nimbus/plugins/usenet-indexer/usenet-indexer
+2025-12-09T22:49:52.530-0600 [DEBUG] plugin: using plugin: version=1
+2025-12-09T22:49:52.530-0600 [DEBUG] plugin.usenet-indexer: plugin address: address=/var/folders/kz/r_wq_mzn41g4nvhr8xyr8m640000gn/T/plugin231930179 network=unix timestamp=2025-12-09T22:49:52.530-0600
+2025-12-09T22:49:52.530-0600 [TRACE] plugin.stdio: waiting for stdio data
+2025-12-09T22:49:52.531-0600	INFO	plugins/manager.go:395	Plugin loaded successfully	{"component": "plugin-manager", "plugin_id": "usenet-indexer", "plugin_name": "Usenet Indexer", "version": "0.1.0", "routes": 9, "is_indexer": true, "is_downloader": false}
+2025-12-09T22:49:52.531-0600	INFO	plugins/manager.go:111	Plugin manager initialized	{"component": "plugin-manager", "loaded": 4}
+2025-12-09T22:49:52.531-0600	INFO	server/main.go:96	Plugin manager initialized	{"plugins_dir": "/Users/blakestevenson/repos/nimbus/plugins"}
+2025-12-09T22:49:52.531-0600	INFO	http/router.go:62	Setting up downloader service
+2025-12-09T22:49:52.531-0600	INFO	http/router.go:66	Creating downloader service
+2025-12-09T22:49:52.531-0600	INFO	http/router.go:69	Initializing downloader service
+2025-12-09T22:49:52.531-0600	INFO	downloader/service.go:44	Initializing downloader service and syncing queued downloads	{"component": "downloader-service"}
+2025-12-09T22:49:52.533-0600	INFO	downloader/service.go:179	Downloader service initialization complete	{"component": "downloader-service", "synced_downloads": 0}
+2025-12-09T22:49:52.533-0600	INFO	http/plugin_routes.go:59	Registering plugin API routes	{"plugin_id": "example-plugin", "route_count": 2}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "example-plugin", "method": "GET", "path": "/api/plugins/example/hello", "auth": "none"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "example-plugin", "method": "GET", "path": "/api/plugins/example/status", "auth": "session"}
+2025-12-09T22:49:52.533-0600	INFO	http/plugin_routes.go:59	Registering plugin API routes	{"plugin_id": "nzb-downloader", "route_count": 15}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "nzb-downloader", "method": "GET", "path": "/api/plugins/nzb-downloader/servers", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "nzb-downloader", "method": "POST", "path": "/api/plugins/nzb-downloader/servers", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "nzb-downloader", "method": "PUT", "path": "/api/plugins/nzb-downloader/servers/{id}", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "nzb-downloader", "method": "DELETE", "path": "/api/plugins/nzb-downloader/servers/{id}", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "nzb-downloader", "method": "POST", "path": "/api/plugins/nzb-downloader/servers/{id}/test", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "nzb-downloader", "method": "GET", "path": "/api/plugins/nzb-downloader/downloads", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "nzb-downloader", "method": "GET", "path": "/api/plugins/nzb-downloader/downloads/stream", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "nzb-downloader", "method": "POST", "path": "/api/plugins/nzb-downloader/downloads", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "nzb-downloader", "method": "POST", "path": "/api/plugins/nzb-downloader/downloads/move", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "nzb-downloader", "method": "DELETE", "path": "/api/plugins/nzb-downloader/downloads/{id}", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "nzb-downloader", "method": "POST", "path": "/api/plugins/nzb-downloader/downloads/{id}/pause", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "nzb-downloader", "method": "POST", "path": "/api/plugins/nzb-downloader/downloads/{id}/resume", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "nzb-downloader", "method": "POST", "path": "/api/plugins/nzb-downloader/downloads/{id}/retry", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "nzb-downloader", "method": "GET", "path": "/api/plugins/nzb-downloader/config", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "nzb-downloader", "method": "POST", "path": "/api/plugins/nzb-downloader/config", "auth": "session"}
+2025-12-09T22:49:52.533-0600	INFO	http/plugin_routes.go:59	Registering plugin API routes	{"plugin_id": "tmdb-plugin", "route_count": 8}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "tmdb-plugin", "method": "GET", "path": "/api/plugins/tmdb/search/movie", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "tmdb-plugin", "method": "GET", "path": "/api/plugins/tmdb/search/tv", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "tmdb-plugin", "method": "GET", "path": "/api/plugins/tmdb/movie/{id}", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "tmdb-plugin", "method": "GET", "path": "/api/plugins/tmdb/tv/{id}", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "tmdb-plugin", "method": "GET", "path": "/api/plugins/tmdb/tv/{id}/season/{season}", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "tmdb-plugin", "method": "GET", "path": "/api/plugins/tmdb/tv/{id}/season/{season}/episode/{episode}", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "tmdb-plugin", "method": "POST", "path": "/api/plugins/tmdb/enrich/{mediaId}", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "tmdb-plugin", "method": "POST", "path": "/api/plugins/tmdb/enrich", "auth": "none"}
+2025-12-09T22:49:52.533-0600	INFO	http/plugin_routes.go:59	Registering plugin API routes	{"plugin_id": "usenet-indexer", "route_count": 9}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "usenet-indexer", "method": "GET", "path": "/api/plugins/usenet-indexer/indexers", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "usenet-indexer", "method": "POST", "path": "/api/plugins/usenet-indexer/indexers", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "usenet-indexer", "method": "PUT", "path": "/api/plugins/usenet-indexer/indexers/{id}", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "usenet-indexer", "method": "DELETE", "path": "/api/plugins/usenet-indexer/indexers/{id}", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "usenet-indexer", "method": "POST", "path": "/api/plugins/usenet-indexer/indexers/{id}/test", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "usenet-indexer", "method": "GET", "path": "/api/plugins/usenet-indexer/search", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "usenet-indexer", "method": "GET", "path": "/api/plugins/usenet-indexer/search/tv", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "usenet-indexer", "method": "GET", "path": "/api/plugins/usenet-indexer/search/movie", "auth": "session"}
+2025-12-09T22:49:52.533-0600	DEBUG	http/plugin_routes.go:68	Registered plugin route	{"plugin_id": "usenet-indexer", "method": "GET", "path": "/api/plugins/usenet-indexer/rss", "auth": "session"}
+2025-12-09T22:49:52.533-0600	INFO	server/main.go:129	HTTP server listening	{"address": "0.0.0.0:8080"}
+2025-12-09T22:49:52.534-0600	FATAL	server/main.go:140	Server error	{"error": "listen tcp 0.0.0.0:8080: bind: address already in use"}
+main.main
+	/Users/blakestevenson/repos/nimbus/cmd/server/main.go:140
+runtime.main
+	/usr/local/go/src/runtime/proc.go:285

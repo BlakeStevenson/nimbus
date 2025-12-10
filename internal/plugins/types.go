@@ -104,6 +104,10 @@ type MediaSuitePlugin interface {
 	IsIndexer(ctx context.Context) (bool, error)
 	// Searches for content using the indexer
 	Search(ctx context.Context, req *IndexerSearchRequest) (*IndexerSearchResponse, error)
+
+	// Downloader facet - OPTIONAL
+	// Returns whether the plugin provides downloader capabilities
+	IsDownloader(ctx context.Context) (bool, error)
 }
 
 // MediaItem represents a media item in the core system

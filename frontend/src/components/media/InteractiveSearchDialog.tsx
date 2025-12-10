@@ -27,6 +27,8 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useInteractiveSearch, type IndexerRelease } from "@/lib/api/media";
+import { useCreateDownload, useDownloaders } from "@/lib/api/downloads";
+import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 
 interface InteractiveSearchDialogProps {
@@ -47,7 +49,10 @@ export function InteractiveSearchDialog({
   onSelectRelease,
 }: InteractiveSearchDialogProps) {
   const [searchFilter, setSearchFilter] = useState("");
-  const [selectedRelease, setSelectedRelease] = useState<string | null>(null);
+  const [downloadingReleases, setDownloadingReleases] = useState<Set<string>>(
+    new Set(),
+  );
+  const { toast } = useToast();
 
   const {
     data: searchResults,
@@ -55,6 +60,9 @@ export function InteractiveSearchDialog({
     error,
     refetch,
   } = useInteractiveSearch(mediaId);
+
+  const { data: downloadersData } = useDownloaders();
+  const createDownload = useCreateDownload();
 
   // Trigger search when dialog opens
   useEffect(() => {
@@ -88,21 +96,78 @@ export function InteractiveSearchDialog({
     const lower = title.toLowerCase();
     const codecs = [];
     if (lower.includes("x265") || lower.includes("hevc")) codecs.push("x265");
-    else if (lower.includes("x264") || lower.includes("avc")) codecs.push("x264");
+    else if (lower.includes("x264") || lower.includes("avc"))
+      codecs.push("x264");
     if (lower.includes("dts")) codecs.push("DTS");
-    else if (lower.includes("ac3") || lower.includes("dd5.1")) codecs.push("DD5.1");
+    else if (lower.includes("ac3") || lower.includes("dd5.1"))
+      codecs.push("DD5.1");
     return codecs;
   };
 
   const filteredReleases =
     searchResults?.releases.filter((release) =>
-      release.title.toLowerCase().includes(searchFilter.toLowerCase())
+      release.title.toLowerCase().includes(searchFilter.toLowerCase()),
     ) || [];
 
-  const handleDownload = (release: IndexerRelease) => {
-    setSelectedRelease(release.guid);
-    if (onSelectRelease) {
-      onSelectRelease(release);
+  const handleDownload = async (release: IndexerRelease) => {
+    // Find an NZB downloader
+    const nzbDownloader = downloadersData?.downloaders.find(
+      (d) => d.id === "nzb-downloader",
+    );
+
+    if (!nzbDownloader) {
+      toast({
+        title: "No downloader available",
+        description: "NZB downloader plugin is not available",
+        variant: "error",
+      });
+      return;
+    }
+
+    // Mark as downloading
+    setDownloadingReleases((prev) => new Set(prev).add(release.guid));
+
+    try {
+      await createDownload.mutateAsync({
+        plugin_id: nzbDownloader.id,
+        name: release.title,
+        url: release.download_url,
+        priority: 0,
+        metadata: {
+          indexer_id: release.indexer_id,
+          indexer_name: release.indexer_name,
+          size: release.size,
+          media_id: mediaId,
+          media_title: mediaTitle,
+          media_kind: mediaKind,
+        },
+      });
+
+      toast({
+        title: "Download started",
+        description: `${release.title} has been added to the download queue`,
+        variant: "success",
+      });
+
+      if (onSelectRelease) {
+        onSelectRelease(release);
+      }
+    } catch (err) {
+      toast({
+        title: "Download failed",
+        description:
+          err instanceof Error ? err.message : "Failed to start download",
+        variant: "error",
+      });
+    } finally {
+      // Remove from downloading set after a delay
+      setTimeout(() => {
+        setDownloadingReleases((prev) => {
+          const next = new Set(prev);
+          next.delete(release.guid);
+          return next;
+        });
+      }, 2000);
     }
   };
 
@@ -224,7 +289,9 @@ export function InteractiveSearchDialog({
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => window.open(release.link, "_blank")}
+                              onClick={() =>
+                                window.open(release.link, "_blank")
+                              }
                             >
                               <ExternalLink className="h-4 w-4" />
                             </Button>
@@ -232,16 +299,19 @@ export function InteractiveSearchDialog({
                           <Button
                             size="sm"
                             onClick={() => handleDownload(release)}
-                            disabled={selectedRelease === release.guid}
+                            disabled={downloadingReleases.has(release.guid)}
                           >
-                            {selectedRelease === release.guid ? (
-                              <CheckCircle className="h-4 w-4 mr-1" />
+                            {downloadingReleases.has(release.guid) ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                Adding...
+                              </>
                             ) : (
-                              <Download className="h-4 w-4 mr-1" />
+                              <>
+                                <Download className="h-4 w-4 mr-1" />
+                                Download
+                              </>
                             )}
-                            {selectedRelease === release.guid
-                              ? "Selected"
-                              : "Download"}
                           </Button>
                         </div>
                       </TableCell>

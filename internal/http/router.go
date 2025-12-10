@@ -1,11 +1,13 @@
 package http
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/blakestevenson/nimbus/internal/auth"
 	"github.com/blakestevenson/nimbus/internal/configstore"
 	"github.com/blakestevenson/nimbus/internal/db/generated"
+	"github.com/blakestevenson/nimbus/internal/downloader"
 	"github.com/blakestevenson/nimbus/internal/http/handlers"
 	"github.com/blakestevenson/nimbus/internal/httputil"
 	"github.com/blakestevenson/nimbus/internal/indexer"
@@ -14,6 +16,7 @@ import (
 	"github.com/blakestevenson/nimbus/internal/plugins"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
 
@@ -23,6 +26,7 @@ func NewRouter(
 	authService auth.Service,
 	configStore *configstore.Store,
 	queries *generated.Queries,
+	db interface{}, // *pgxpool.Pool
 	libraryRootPath string,
 	pluginManager interface{}, // *plugins.PluginManager or nil
 	logger *zap.Logger,
@@ -50,6 +54,30 @@ func NewRouter(
 		if pm, ok := pluginManager.(*plugins.PluginManager); ok {
 			indexerService = indexer.NewService(pm, logger)
 		}
+	}
+
+	// Initialize downloader service if plugin manager is available
+	var downloaderService *downloader.Service
+	if pluginManager != nil && db != nil {
+		logger.Info("Setting up downloader service")
+		if pm, ok := pluginManager.(*plugins.PluginManager); ok {
+			// Cast db to pgxpool.Pool
+			if dbPool, ok := db.(*pgxpool.Pool); ok {
+				logger.Info("Creating downloader service")
+				downloaderService = downloader.NewService(pm, dbPool, logger)
+				// Sync pending downloads from database to plugin queues
+				logger.Info("Initializing downloader service")
+				if err := downloaderService.Initialize(context.Background()); err != nil {
+					logger.Error("Failed to initialize downloader service", zap.Error(err))
+				}
+			} else {
+				logger.Warn("db is not a pgxpool.Pool")
+			}
+		} else {
+			logger.Warn("pluginManager is not a *plugins.PluginManager")
+		}
+	} else {
+		logger.Warn("pluginManager or db is nil", zap.Bool("pm_nil", pluginManager == nil), zap.Bool("db_nil", db == nil))
 	}
 
 	// Health check
@@ -149,6 +177,15 @@ func NewRouter(
 				r.Use(AuthMiddleware(authService, logger))
 
 				setupIndexerRoutes(r, indexerService, logger)
+			})
+		}
+
+		// Unified downloader routes (require authentication)
+		if downloaderService != nil {
+			r.Group(func(r chi.Router) {
+				r.Use(AuthMiddleware(authService, logger))
+
+				setupDownloaderRoutes(r, downloaderService, logger)
 			})
 		}
 

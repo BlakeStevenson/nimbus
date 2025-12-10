@@ -562,6 +562,11 @@ func (p *UsenetIndexerPlugin) Search(ctx context.Context, req *plugins.IndexerSe
 	}, fmt.Errorf("direct RPC search requires SDK access - please use HTTP API endpoints instead")
 }
 
+// IsDownloader returns false as this is not a downloader plugin
+func (p *UsenetIndexerPlugin) IsDownloader(ctx context.Context) (bool, error) {
+	return false, nil
+}
+
 // Helper functions
 
 func (p *UsenetIndexerPlugin) getIndexers(ctx context.Context, sdk plugins.SDKInterface) ([]IndexerConfig, error) {

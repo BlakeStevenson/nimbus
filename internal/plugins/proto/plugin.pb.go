@@ -1277,6 +1277,95 @@ func (x *IsIndexerResponse) GetError() string {
 	return ""
 }
 
+// Downloader methods
+type IsDownloaderRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IsDownloaderRequest) Reset() {
+	*x = IsDownloaderRequest{}
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IsDownloaderRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IsDownloaderRequest) ProtoMessage() {}
+
+func (x *IsDownloaderRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IsDownloaderRequest.ProtoReflect.Descriptor instead.
+func (*IsDownloaderRequest) Descriptor() ([]byte, []int) {
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{24}
+}
+
+type IsDownloaderResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	IsDownloader  bool                   `protobuf:"varint,1,opt,name=is_downloader,json=isDownloader,proto3" json:"is_downloader,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IsDownloaderResponse) Reset() {
+	*x = IsDownloaderResponse{}
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IsDownloaderResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IsDownloaderResponse) ProtoMessage() {}
+
+func (x *IsDownloaderResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IsDownloaderResponse.ProtoReflect.Descriptor instead.
+func (*IsDownloaderResponse) Descriptor() ([]byte, []int) {
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *IsDownloaderResponse) GetIsDownloader() bool {
+	if x != nil {
+		return x.IsDownloader
+	}
+	return false
+}
+
+func (x *IsDownloaderResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 type IndexerSearchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
@@ -1296,7 +1385,7 @@ type IndexerSearchRequest struct {
 
 func (x *IndexerSearchRequest) Reset() {
 	*x = IndexerSearchRequest{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[24]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1308,7 +1397,7 @@ func (x *IndexerSearchRequest) String() string {
 func (*IndexerSearchRequest) ProtoMessage() {}
 
 func (x *IndexerSearchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[24]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1321,7 +1410,7 @@ func (x *IndexerSearchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexerSearchRequest.ProtoReflect.Descriptor instead.
 func (*IndexerSearchRequest) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{24}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *IndexerSearchRequest) GetQuery() string {
@@ -1414,7 +1503,7 @@ type IndexerSearchResponse struct {
 
 func (x *IndexerSearchResponse) Reset() {
 	*x = IndexerSearchResponse{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[25]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1426,7 +1515,7 @@ func (x *IndexerSearchResponse) String() string {
 func (*IndexerSearchResponse) ProtoMessage() {}
 
 func (x *IndexerSearchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[25]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1439,7 +1528,7 @@ func (x *IndexerSearchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexerSearchResponse.ProtoReflect.Descriptor instead.
 func (*IndexerSearchResponse) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{25}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *IndexerSearchResponse) GetReleases() []*IndexerRelease {
@@ -1497,7 +1586,7 @@ type IndexerRelease struct {
 
 func (x *IndexerRelease) Reset() {
 	*x = IndexerRelease{}
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[26]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1509,7 +1598,7 @@ func (x *IndexerRelease) String() string {
 func (*IndexerRelease) ProtoMessage() {}
 
 func (x *IndexerRelease) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[26]
+	mi := &file_internal_plugins_proto_plugin_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1522,7 +1611,7 @@ func (x *IndexerRelease) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexerRelease.ProtoReflect.Descriptor instead.
 func (*IndexerRelease) Descriptor() ([]byte, []int) {
-	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{26}
+	return file_internal_plugins_proto_plugin_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *IndexerRelease) GetGuid() string {
@@ -1701,6 +1790,10 @@ const file_internal_plugins_proto_plugin_proto_rawDesc = "" +
 	"\x11IsIndexerResponse\x12\x1d\n" +
 	"\n" +
 	"is_indexer\x18\x01 \x01(\bR\tisIndexer\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\x15\n" +
+	"\x13IsDownloaderRequest\"Q\n" +
+	"\x14IsDownloaderResponse\x12#\n" +
+	"\ris_downloader\x18\x01 \x01(\bR\fisDownloader\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\"\xa4\x02\n" +
 	"\x14IndexerSearchRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x12\n" +
@@ -1743,7 +1836,7 @@ const file_internal_plugins_proto_plugin_proto_rawDesc = "" +
 	"\findexer_name\x18\f \x01(\tR\vindexerName\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xda\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xa3\x04\n" +
 	"\rPluginService\x12;\n" +
 	"\bMetadata\x12\x16.proto.MetadataRequest\x1a\x17.proto.MetadataResponse\x12>\n" +
 	"\tAPIRoutes\x12\x17.proto.APIRoutesRequest\x1a\x18.proto.APIRoutesResponse\x12>\n" +
@@ -1752,7 +1845,8 @@ const file_internal_plugins_proto_plugin_proto_rawDesc = "" +
 	"UIManifest\x12\x18.proto.UIManifestRequest\x1a\x19.proto.UIManifestResponse\x12D\n" +
 	"\vHandleEvent\x12\x19.proto.HandleEventRequest\x1a\x1a.proto.HandleEventResponse\x12>\n" +
 	"\tIsIndexer\x12\x17.proto.IsIndexerRequest\x1a\x18.proto.IsIndexerResponse\x12C\n" +
-	"\x06Search\x12\x1b.proto.IndexerSearchRequest\x1a\x1c.proto.IndexerSearchResponse2\xa7\x02\n" +
+	"\x06Search\x12\x1b.proto.IndexerSearchRequest\x1a\x1c.proto.IndexerSearchResponse\x12G\n" +
+	"\fIsDownloader\x12\x1a.proto.IsDownloaderRequest\x1a\x1b.proto.IsDownloaderResponse2\xa7\x02\n" +
 	"\n" +
 	"SDKService\x12>\n" +
 	"\tConfigGet\x12\x17.proto.ConfigGetRequest\x1a\x18.proto.ConfigGetResponse\x12P\n" +
@@ -1772,7 +1866,7 @@ func file_internal_plugins_proto_plugin_proto_rawDescGZIP() []byte {
 	return file_internal_plugins_proto_plugin_proto_rawDescData
 }
 
-var file_internal_plugins_proto_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_internal_plugins_proto_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_internal_plugins_proto_plugin_proto_goTypes = []any{
 	(*MetadataRequest)(nil),         // 0: proto.MetadataRequest
 	(*APIRoutesRequest)(nil),        // 1: proto.APIRoutesRequest
@@ -1798,23 +1892,25 @@ var file_internal_plugins_proto_plugin_proto_goTypes = []any{
 	(*ConfigDeleteResponse)(nil),    // 21: proto.ConfigDeleteResponse
 	(*IsIndexerRequest)(nil),        // 22: proto.IsIndexerRequest
 	(*IsIndexerResponse)(nil),       // 23: proto.IsIndexerResponse
-	(*IndexerSearchRequest)(nil),    // 24: proto.IndexerSearchRequest
-	(*IndexerSearchResponse)(nil),   // 25: proto.IndexerSearchResponse
-	(*IndexerRelease)(nil),          // 26: proto.IndexerRelease
-	nil,                             // 27: proto.HandleAPIRequest.QueryEntry
-	nil,                             // 28: proto.HandleAPIRequest.HeadersEntry
-	nil,                             // 29: proto.HandleAPIResponse.HeadersEntry
-	nil,                             // 30: proto.IndexerRelease.AttributesEntry
+	(*IsDownloaderRequest)(nil),     // 24: proto.IsDownloaderRequest
+	(*IsDownloaderResponse)(nil),    // 25: proto.IsDownloaderResponse
+	(*IndexerSearchRequest)(nil),    // 26: proto.IndexerSearchRequest
+	(*IndexerSearchResponse)(nil),   // 27: proto.IndexerSearchResponse
+	(*IndexerRelease)(nil),          // 28: proto.IndexerRelease
+	nil,                             // 29: proto.HandleAPIRequest.QueryEntry
+	nil,                             // 30: proto.HandleAPIRequest.HeadersEntry
+	nil,                             // 31: proto.HandleAPIResponse.HeadersEntry
+	nil,                             // 32: proto.IndexerRelease.AttributesEntry
 }
 var file_internal_plugins_proto_plugin_proto_depIdxs = []int32{
 	5,  // 0: proto.APIRoutesResponse.routes:type_name -> proto.RouteDescriptor
-	27, // 1: proto.HandleAPIRequest.query:type_name -> proto.HandleAPIRequest.QueryEntry
-	28, // 2: proto.HandleAPIRequest.headers:type_name -> proto.HandleAPIRequest.HeadersEntry
-	29, // 3: proto.HandleAPIResponse.headers:type_name -> proto.HandleAPIResponse.HeadersEntry
+	29, // 1: proto.HandleAPIRequest.query:type_name -> proto.HandleAPIRequest.QueryEntry
+	30, // 2: proto.HandleAPIRequest.headers:type_name -> proto.HandleAPIRequest.HeadersEntry
+	31, // 3: proto.HandleAPIResponse.headers:type_name -> proto.HandleAPIResponse.HeadersEntry
 	10, // 4: proto.UIManifestResponse.nav_items:type_name -> proto.UINavItem
 	11, // 5: proto.UIManifestResponse.routes:type_name -> proto.UIRoute
-	26, // 6: proto.IndexerSearchResponse.releases:type_name -> proto.IndexerRelease
-	30, // 7: proto.IndexerRelease.attributes:type_name -> proto.IndexerRelease.AttributesEntry
+	28, // 6: proto.IndexerSearchResponse.releases:type_name -> proto.IndexerRelease
+	32, // 7: proto.IndexerRelease.attributes:type_name -> proto.IndexerRelease.AttributesEntry
 	7,  // 8: proto.HandleAPIRequest.QueryEntry.value:type_name -> proto.StringList
 	7,  // 9: proto.HandleAPIRequest.HeadersEntry.value:type_name -> proto.StringList
 	7,  // 10: proto.HandleAPIResponse.HeadersEntry.value:type_name -> proto.StringList
@@ -1824,24 +1920,26 @@ var file_internal_plugins_proto_plugin_proto_depIdxs = []int32{
 	2,  // 14: proto.PluginService.UIManifest:input_type -> proto.UIManifestRequest
 	12, // 15: proto.PluginService.HandleEvent:input_type -> proto.HandleEventRequest
 	22, // 16: proto.PluginService.IsIndexer:input_type -> proto.IsIndexerRequest
-	24, // 17: proto.PluginService.Search:input_type -> proto.IndexerSearchRequest
-	14, // 18: proto.SDKService.ConfigGet:input_type -> proto.ConfigGetRequest
-	16, // 19: proto.SDKService.ConfigGetString:input_type -> proto.ConfigGetStringRequest
-	18, // 20: proto.SDKService.ConfigSet:input_type -> proto.ConfigSetRequest
-	20, // 21: proto.SDKService.ConfigDelete:input_type -> proto.ConfigDeleteRequest
-	3,  // 22: proto.PluginService.Metadata:output_type -> proto.MetadataResponse
-	4,  // 23: proto.PluginService.APIRoutes:output_type -> proto.APIRoutesResponse
-	8,  // 24: proto.PluginService.HandleAPI:output_type -> proto.HandleAPIResponse
-	9,  // 25: proto.PluginService.UIManifest:output_type -> proto.UIManifestResponse
-	13, // 26: proto.PluginService.HandleEvent:output_type -> proto.HandleEventResponse
-	23, // 27: proto.PluginService.IsIndexer:output_type -> proto.IsIndexerResponse
-	25, // 28: proto.PluginService.Search:output_type -> proto.IndexerSearchResponse
-	15, // 29: proto.SDKService.ConfigGet:output_type -> proto.ConfigGetResponse
-	17, // 30: proto.SDKService.ConfigGetString:output_type -> proto.ConfigGetStringResponse
-	19, // 31: proto.SDKService.ConfigSet:output_type -> proto.ConfigSetResponse
-	21, // 32: proto.SDKService.ConfigDelete:output_type -> proto.ConfigDeleteResponse
-	22, // [22:33] is the sub-list for method output_type
-	11, // [11:22] is the sub-list for method input_type
+	26, // 17: proto.PluginService.Search:input_type -> proto.IndexerSearchRequest
+	24, // 18: proto.PluginService.IsDownloader:input_type -> proto.IsDownloaderRequest
+	14, // 19: proto.SDKService.ConfigGet:input_type -> proto.ConfigGetRequest
+	16, // 20: proto.SDKService.ConfigGetString:input_type -> proto.ConfigGetStringRequest
+	18, // 21: proto.SDKService.ConfigSet:input_type -> proto.ConfigSetRequest
+	20, // 22: proto.SDKService.ConfigDelete:input_type -> proto.ConfigDeleteRequest
+	3,  // 23: proto.PluginService.Metadata:output_type -> proto.MetadataResponse
+	4,  // 24: proto.PluginService.APIRoutes:output_type -> proto.APIRoutesResponse
+	8,  // 25: proto.PluginService.HandleAPI:output_type -> proto.HandleAPIResponse
+	9,  // 26: proto.PluginService.UIManifest:output_type -> proto.UIManifestResponse
+	13, // 27: proto.PluginService.HandleEvent:output_type -> proto.HandleEventResponse
+	23, // 28: proto.PluginService.IsIndexer:output_type -> proto.IsIndexerResponse
+	27, // 29: proto.PluginService.Search:output_type -> proto.IndexerSearchResponse
+	25, // 30: proto.PluginService.IsDownloader:output_type -> proto.IsDownloaderResponse
+	15, // 31: proto.SDKService.ConfigGet:output_type -> proto.ConfigGetResponse
+	17, // 32: proto.SDKService.ConfigGetString:output_type -> proto.ConfigGetStringResponse
+	19, // 33: proto.SDKService.ConfigSet:output_type -> proto.ConfigSetResponse
+	21, // 34: proto.SDKService.ConfigDelete:output_type -> proto.ConfigDeleteResponse
+	23, // [23:35] is the sub-list for method output_type
+	11, // [11:23] is the sub-list for method input_type
 	11, // [11:11] is the sub-list for extension type_name
 	11, // [11:11] is the sub-list for extension extendee
 	0,  // [0:11] is the sub-list for field type_name
@@ -1859,7 +1957,7 @@ func file_internal_plugins_proto_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_plugins_proto_plugin_proto_rawDesc), len(file_internal_plugins_proto_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   31,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

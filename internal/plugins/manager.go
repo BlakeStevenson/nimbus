@@ -18,12 +18,13 @@ import (
 
 // LoadedPlugin represents a plugin that has been loaded and is running
 type LoadedPlugin struct {
-	Meta      *PluginMetadata
-	Client    MediaSuitePlugin // RPC client
-	Routes    []RouteDescriptor
-	UI        *UIManifest
-	IsIndexer bool           // Whether this plugin provides indexer functionality
-	RawClient *plugin.Client // The underlying go-plugin client
+	Meta         *PluginMetadata
+	Client       MediaSuitePlugin // RPC client
+	Routes       []RouteDescriptor
+	UI           *UIManifest
+	IsIndexer    bool           // Whether this plugin provides indexer functionality
+	IsDownloader bool           // Whether this plugin provides downloader functionality
+	RawClient    *plugin.Client // The underlying go-plugin client
 }
 
 // PluginManager manages the lifecycle of plugins
@@ -163,6 +164,21 @@ func (pm *PluginManager) ListIndexerPlugins() []*LoadedPlugin {
 	}
 
 	return indexers
+}
+
+// ListDownloaderPlugins returns all loaded plugins that provide downloader functionality
+func (pm *PluginManager) ListDownloaderPlugins() []*LoadedPlugin {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	downloaders := make([]*LoadedPlugin, 0)
+	for _, lp := range pm.plugins {
+		if lp.IsDownloader {
+			downloaders = append(downloaders, lp)
+		}
+	}
+
+	return downloaders
 }
 
 // EnablePlugin enables a plugin and loads it
@@ -358,14 +374,22 @@ func (pm *PluginManager) loadPlugin(ctx context.Context, id string) error {
 		isIndexer = indexerCheck
 	}
 
+	// Check if plugin is a downloader
+	isDownloader := false
+	downloaderCheck, err := pluginClient.IsDownloader(ctx)
+	if err == nil {
+		isDownloader = downloaderCheck
+	}
+
 	// Store loaded plugin
 	pm.plugins[id] = &LoadedPlugin{
-		Meta:      meta,
-		Client:    pluginClient,
-		Routes:    routes,
-		UI:        uiManifest,
-		IsIndexer: isIndexer,
-		RawClient: client,
+		Meta:         meta,
+		Client:       pluginClient,
+		Routes:       routes,
+		UI:           uiManifest,
+		IsIndexer:    isIndexer,
+		IsDownloader: isDownloader,
+		RawClient:    client,
 	}
 
 	pm.logger.Info("Plugin loaded successfully",
@@ -373,7 +397,8 @@ func (pm *PluginManager) loadPlugin(ctx context.Context, id string) error {
 		zap.String("plugin_name", meta.Name),
 		zap.String("version", meta.Version),
 		zap.Int("routes", len(routes)),
-		zap.Bool("is_indexer", isIndexer))
+		zap.Bool("is_indexer", isIndexer),
+		zap.Bool("is_downloader", isDownloader))
 
 	return nil
 }
@@ -453,7 +478,7 @@ func (pm *PluginManager) RegisterRoutes(router interface{}, handlers *APIHandler
 		return
 	}
 
-	for id, lp := range pm.plugins {
+	for _, lp := range pm.plugins {
 		for _, route := range lp.Routes {
 			handler := handlers.makePluginAPIHandler(lp, route)
 			chiRouter.Method(route.Method, route.Path, handler)

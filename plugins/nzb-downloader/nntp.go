@@ -36,6 +36,11 @@ func DialNNTP(host string, port int, useSSL bool) (*NNTPClient, error) {
 		return nil, fmt.Errorf("failed to connect: %w", err)
 	}
 
+	// Set read/write timeouts to prevent hanging connections
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		tcpConn.SetKeepAlive(true)
+	}
+
 	client := &NNTPClient{
 		conn:   conn,
 		reader: bufio.NewReader(conn),
@@ -52,10 +57,20 @@ func DialNNTP(host string, port int, useSSL bool) (*NNTPClient, error) {
 	return client, nil
 }
 
-// Close closes the connection
+// Close closes the connection gracefully
 func (c *NNTPClient) Close() error {
+	if c.conn == nil {
+		return nil
+	}
+
+	// Try to send QUIT command, but don't wait for response
+	// If it fails, we still close the connection
 	c.sendCommand("QUIT")
-	return c.conn.Close()
+
+	// Close the connection regardless of QUIT result
+	err := c.conn.Close()
+	c.conn = nil
+	return err
 }
 
 // Authenticate logs in to the server

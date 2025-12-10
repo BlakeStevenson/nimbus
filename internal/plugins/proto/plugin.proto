@@ -13,6 +13,7 @@ service PluginService {
   rpc HandleEvent(HandleEventRequest) returns (HandleEventResponse);
   rpc IsIndexer(IsIndexerRequest) returns (IsIndexerResponse);
   rpc Search(IndexerSearchRequest) returns (IndexerSearchResponse);
+  rpc IsDownloader(IsDownloaderRequest) returns (IsDownloaderResponse);
 }
 
 // SDKService defines the gRPC service for SDK calls from plugin to host
@@ -142,6 +143,14 @@ message IsIndexerRequest {}
 
 message IsIndexerResponse {
   bool is_indexer = 1;
+  string error = 2;
+}
+
+// Downloader methods
+message IsDownloaderRequest {}
+
+message IsDownloaderResponse {
+  bool is_downloader = 1;
   string error = 2;
 }
 

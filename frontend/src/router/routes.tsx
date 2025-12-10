@@ -13,6 +13,7 @@ import LibraryPage from "@/pages/LibraryPage";
 import BrowsePage from "@/pages/BrowsePage";
 import SearchPage from "@/pages/SearchPage";
 import TMDBDetailPage from "@/pages/TMDBDetailPage";
+import DownloadsPage from "@/pages/DownloadsPage";
 import { DynamicPluginRoute } from "@/components/plugins/DynamicPluginRoute";
 
 export const router = createBrowserRouter([
@@ -104,6 +105,10 @@ export const router = createBrowserRouter([
       {
         path: "library",
         element: <LibraryPage />,
+      },
+      {
+        path: "downloads",
+        element: <DownloadsPage />,
       },
       {
         path: "config",
