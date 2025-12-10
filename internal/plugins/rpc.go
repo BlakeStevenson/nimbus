@@ -207,6 +207,71 @@ func (s *GRPCServer) HandleEvent(ctx context.Context, req *proto.HandleEventRequ
 	return &proto.HandleEventResponse{Success: true}, nil
 }
 
+// IsIndexer implements the IsIndexer RPC
+func (s *GRPCServer) IsIndexer(ctx context.Context, req *proto.IsIndexerRequest) (*proto.IsIndexerResponse, error) {
+	isIndexer, err := s.Impl.IsIndexer(ctx)
+	if err != nil {
+		return &proto.IsIndexerResponse{
+			IsIndexer: false,
+			Error:     err.Error(),
+		}, nil
+	}
+
+	return &proto.IsIndexerResponse{IsIndexer: isIndexer}, nil
+}
+
+// Search implements the Search RPC
+func (s *GRPCServer) Search(ctx context.Context, req *proto.IndexerSearchRequest) (*proto.IndexerSearchResponse, error) {
+	// Convert proto request to plugin request
+	searchReq := &IndexerSearchRequest{
+		Query:      req.Query,
+		Type:       req.Type,
+		Categories: req.Categories,
+		TVDBID:     req.Tvdbid,
+		TVRageID:   req.Tvrageid,
+		Season:     int(req.Season),
+		Episode:    int(req.Episode),
+		IMDBID:     req.Imdbid,
+		TMDBID:     req.Tmdbid,
+		Limit:      int(req.Limit),
+		Offset:     int(req.Offset),
+	}
+
+	// Call plugin implementation
+	resp, err := s.Impl.Search(ctx, searchReq)
+	if err != nil {
+		return &proto.IndexerSearchResponse{
+			Error: err.Error(),
+		}, nil
+	}
+
+	// Convert releases to proto
+	protoReleases := make([]*proto.IndexerRelease, len(resp.Releases))
+	for i, release := range resp.Releases {
+		protoReleases[i] = &proto.IndexerRelease{
+			Guid:        release.GUID,
+			Title:       release.Title,
+			Link:        release.Link,
+			Comments:    release.Comments,
+			PublishDate: release.PublishDate.Unix(),
+			Category:    release.Category,
+			Size:        release.Size,
+			DownloadUrl: release.DownloadURL,
+			Description: release.Description,
+			Attributes:  release.Attributes,
+			IndexerId:   release.IndexerID,
+			IndexerName: release.IndexerName,
+		}
+	}
+
+	return &proto.IndexerSearchResponse{
+		Releases:    protoReleases,
+		Total:       int32(resp.Total),
+		IndexerId:   resp.IndexerID,
+		IndexerName: resp.IndexerName,
+	}, nil
+}
+
 // GRPCClient is the gRPC client implementation that forwards calls to the plugin
 type GRPCClient struct {
 	client proto.PluginServiceClient
@@ -362,6 +427,74 @@ func (c *GRPCClient) HandleEvent(ctx context.Context, evt Event) error {
 	}
 
 	return nil
+}
+
+// IsIndexer calls the plugin's IsIndexer method
+func (c *GRPCClient) IsIndexer(ctx context.Context) (bool, error) {
+	resp, err := c.client.IsIndexer(ctx, &proto.IsIndexerRequest{})
+	if err != nil {
+		return false, err
+	}
+
+	if resp.Error != "" {
+		return false, fmt.Errorf("plugin error: %s", resp.Error)
+	}
+
+	return resp.IsIndexer, nil
+}
+
+// Search calls the plugin's Search method
+func (c *GRPCClient) Search(ctx context.Context, req *IndexerSearchRequest) (*IndexerSearchResponse, error) {
+	// Convert to proto request
+	protoReq := &proto.IndexerSearchRequest{
+		Query:      req.Query,
+		Type:       req.Type,
+		Categories: req.Categories,
+		Tvdbid:     req.TVDBID,
+		Tvrageid:   req.TVRageID,
+		Season:     int32(req.Season),
+		Episode:    int32(req.Episode),
+		Imdbid:     req.IMDBID,
+		Tmdbid:     req.TMDBID,
+		Limit:      int32(req.Limit),
+		Offset:     int32(req.Offset),
+	}
+
+	// Call plugin
+	resp, err := c.client.Search(ctx, protoReq)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Error != "" {
+		return nil, fmt.Errorf("plugin error: %s", resp.Error)
+	}
+
+	// Convert proto releases to plugin releases
+	releases := make([]IndexerRelease, len(resp.Releases))
+	for i, protoRelease := range resp.Releases {
+		releases[i] = IndexerRelease{
+			GUID:        protoRelease.Guid,
+			Title:       protoRelease.Title,
+			Link:        protoRelease.Link,
+			Comments:    protoRelease.Comments,
+			PublishDate: time.Unix(protoRelease.PublishDate, 0),
+			Category:    protoRelease.Category,
+			Size:        protoRelease.Size,
+			DownloadURL: protoRelease.DownloadUrl,
+			Description: protoRelease.Description,
+			Attributes:  protoRelease.Attributes,
+			IndexerID:   protoRelease.IndexerId,
+			IndexerName: protoRelease.IndexerName,
+		}
+	}
+
+	return &IndexerSearchResponse{
+		Releases:    releases,
+		Total:       int(resp.Total),
+		IndexerID:   resp.IndexerId,
+		IndexerName: resp.IndexerName,
+	}, nil
 }
 
 // ============================================================================

@@ -10,6 +10,9 @@ import { UsersPage } from "@/pages/UsersPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
 import LibraryPage from "@/pages/LibraryPage";
+import BrowsePage from "@/pages/BrowsePage";
+import SearchPage from "@/pages/SearchPage";
+import TMDBDetailPage from "@/pages/TMDBDetailPage";
 import { DynamicPluginRoute } from "@/components/plugins/DynamicPluginRoute";
 
 export const router = createBrowserRouter([
@@ -32,6 +35,14 @@ export const router = createBrowserRouter([
       {
         index: true,
         element: <DashboardPage />,
+      },
+      {
+        path: "search",
+        element: <SearchPage />,
+      },
+      {
+        path: "tmdb/:type/:id",
+        element: <TMDBDetailPage />,
       },
       {
         path: "media",
@@ -85,6 +96,10 @@ export const router = createBrowserRouter([
       {
         path: "media/:id",
         element: <MediaDetailPage />,
+      },
+      {
+        path: "browse",
+        element: <BrowsePage />,
       },
       {
         path: "library",

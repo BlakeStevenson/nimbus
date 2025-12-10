@@ -561,6 +561,24 @@ func (p *UsenetIndexerPlugin) HandleEvent(ctx context.Context, evt plugins.Event
 	return nil
 }
 
+// IsIndexer returns true to indicate this plugin provides indexer functionality
+func (p *UsenetIndexerPlugin) IsIndexer(ctx context.Context) (bool, error) {
+	return true, nil
+}
+
+// Search implements the unified indexer search interface
+func (p *UsenetIndexerPlugin) Search(ctx context.Context, req *plugins.IndexerSearchRequest) (*plugins.IndexerSearchResponse, error) {
+	// Note: This method doesn't have direct SDK access like HandleAPI does
+	// For now, we return an error indicating this should be called via the HTTP API
+	// In the future, we could pass SDK through the RPC call
+	return &plugins.IndexerSearchResponse{
+		Releases:    []plugins.IndexerRelease{},
+		Total:       0,
+		IndexerID:   "usenet-indexer",
+		IndexerName: "Usenet Indexer",
+	}, fmt.Errorf("direct RPC search requires SDK access - please use HTTP API endpoints instead")
+}
+
 // Helper functions
 
 func (p *UsenetIndexerPlugin) getIndexers(ctx context.Context, sdk plugins.SDKInterface) ([]IndexerConfig, error) {
@@ -651,7 +669,9 @@ func (p *UsenetIndexerPlugin) searchMultipleIndexers(
 	resultChan := make(chan indexerResult, len(indexers))
 	var wg sync.WaitGroup
 
+	fmt.Fprintf(os.Stderr, "USENET PLUGIN: Searching %d indexers\n", len(indexers))
 	for _, indexer := range indexers {
+		fmt.Fprintf(os.Stderr, "USENET PLUGIN: Starting search for indexer: %s (%s)\n", indexer.Name, indexer.ID)
 		wg.Add(1)
 		go func(idx IndexerConfig) {
 			defer wg.Done()
@@ -678,6 +698,8 @@ func (p *UsenetIndexerPlugin) searchMultipleIndexers(
 			for i := range releases {
 				releases[i].Attributes["indexer"] = idx.Name
 				releases[i].Attributes["indexer_id"] = idx.ID
+				releases[i].IndexerID = idx.ID
+				releases[i].IndexerName = idx.Name
 			}
 
 			resultChan <- indexerResult{
@@ -694,8 +716,9 @@ func (p *UsenetIndexerPlugin) searchMultipleIndexers(
 		close(resultChan)
 	}()
 
-	// Collect results
+	// Collect results and track indexers that returned nothing
 	allReleases := []Release{}
+	indexersNeedingFallback := []IndexerConfig{}
 	var lastError error
 
 	for result := range resultChan {
@@ -704,7 +727,70 @@ func (p *UsenetIndexerPlugin) searchMultipleIndexers(
 			lastError = result.err
 			continue
 		}
-		allReleases = append(allReleases, result.releases...)
+
+		if len(result.releases) > 0 {
+			allReleases = append(allReleases, result.releases...)
+		} else {
+			// This indexer returned 0 results - may need fallback
+			for _, idx := range indexers {
+				if idx.Name == result.indexerName {
+					indexersNeedingFallback = append(indexersNeedingFallback, idx)
+					break
+				}
+			}
+		}
+	}
+
+	// If some indexers returned no results with tvdbid, retry with query-based search
+	if len(indexersNeedingFallback) > 0 && params.TVDBID != "" && params.Query != "" && (params.Season > 0 || params.Episode > 0) {
+		// Retry those indexers without tvdbid (will use query parameter)
+		fallbackParams := params
+		fallbackParams.TVDBID = ""
+
+		fallbackResultChan := make(chan indexerResult, len(indexersNeedingFallback))
+		var fallbackWg sync.WaitGroup
+
+		for _, indexer := range indexersNeedingFallback {
+			fallbackWg.Add(1)
+			go func(idx IndexerConfig) {
+				defer fallbackWg.Done()
+
+				client := NewNewznabClient(idx.URL, idx.APIKey)
+				releases, err := searchFunc(client, fallbackParams)
+
+				// Tag releases with indexer name
+				for i := range releases {
+					releases[i].Attributes["indexer"] = idx.Name
+					releases[i].Attributes["indexer_id"] = idx.ID
+					releases[i].IndexerID = idx.ID
+					releases[i].IndexerName = idx.Name
+				}
+
+				fallbackResultChan <- indexerResult{
+					indexerName: idx.Name,
+					releases:    releases,
+					err:         err,
+				}
+			}(indexer)
+		}
+
+		// Wait for fallback searches
+		go func() {
+			fallbackWg.Wait()
+			close(fallbackResultChan)
+		}()
+
+		// Collect fallback results and filter by series name
+		for result := range fallbackResultChan {
+			if result.err != nil {
+				continue
+			}
+			if len(result.releases) > 0 {
+				// Filter releases to match series name exactly
+				filtered := filterBySeriesName(result.releases, params.Query)
+				allReleases = append(allReleases, filtered...)
+			}
+		}
 	}
 
 	// If all indexers failed, return the last error
@@ -812,6 +898,40 @@ func jsonResponse(statusCode int, data interface{}) (*plugins.PluginHTTPResponse
 		},
 		Body: body,
 	}, nil
+}
+
+// filterBySeriesName filters releases to only include those that match the series name
+// This helps avoid false matches like "The Rookie Feds" when searching for "The Rookie"
+func filterBySeriesName(releases []Release, seriesName string) []Release {
+	filtered := []Release{}
+
+	// Normalize series name for comparison (lowercase, replace spaces with dots)
+	normalizedSeries := strings.ToLower(strings.ReplaceAll(seriesName, " ", "."))
+
+	for _, release := range releases {
+		// Normalize release title
+		normalizedTitle := strings.ToLower(release.Title)
+
+		// Check if the release title starts with the series name
+		if strings.HasPrefix(normalizedTitle, normalizedSeries) {
+			// Check what comes after the series name
+			afterSeries := normalizedTitle[len(normalizedSeries):]
+
+			// Must be followed by:
+			// - Nothing (exact match)
+			// - Year in parentheses like (2018)
+			// - Season marker like .S01 or .s01
+			// - Direct season marker like S01 (no dot)
+			if len(afterSeries) == 0 ||
+				afterSeries[0] == '(' || // Year
+				(len(afterSeries) >= 2 && afterSeries[0] == '.' && (afterSeries[1] == 's' || afterSeries[1] == 'S')) || // .S01
+				(afterSeries[0] == 's' || afterSeries[0] == 'S') { // S01
+				filtered = append(filtered, release)
+			}
+		}
+	}
+
+	return filtered
 }
 
 func main() {

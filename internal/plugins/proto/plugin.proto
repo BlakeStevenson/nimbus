@@ -11,6 +11,8 @@ service PluginService {
   rpc HandleAPI(HandleAPIRequest) returns (HandleAPIResponse);
   rpc UIManifest(UIManifestRequest) returns (UIManifestResponse);
   rpc HandleEvent(HandleEventRequest) returns (HandleEventResponse);
+  rpc IsIndexer(IsIndexerRequest) returns (IsIndexerResponse);
+  rpc Search(IndexerSearchRequest) returns (IndexerSearchResponse);
 }
 
 // SDKService defines the gRPC service for SDK calls from plugin to host
@@ -133,4 +135,49 @@ message ConfigDeleteRequest {
 
 message ConfigDeleteResponse {
   string error = 1;
+}
+
+// Indexer methods
+message IsIndexerRequest {}
+
+message IsIndexerResponse {
+  bool is_indexer = 1;
+  string error = 2;
+}
+
+message IndexerSearchRequest {
+  string query = 1;
+  string type = 2;
+  repeated string categories = 3;
+  string tvdbid = 4;
+  string tvrageid = 5;
+  int32 season = 6;
+  int32 episode = 7;
+  string imdbid = 8;
+  string tmdbid = 9;
+  int32 limit = 10;
+  int32 offset = 11;
+}
+
+message IndexerSearchResponse {
+  repeated IndexerRelease releases = 1;
+  int32 total = 2;
+  string indexer_id = 3;
+  string indexer_name = 4;
+  string error = 5;
+}
+
+message IndexerRelease {
+  string guid = 1;
+  string title = 2;
+  string link = 3;
+  string comments = 4;
+  int64 publish_date = 5; // Unix timestamp
+  string category = 6;
+  int64 size = 7;
+  string download_url = 8;
+  string description = 9;
+  map<string, string> attributes = 10;
+  string indexer_id = 11;
+  string indexer_name = 12;
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   useMediaItem,
@@ -7,10 +7,13 @@ import {
   useDeleteMediaFile,
   useDeleteMediaItem,
   useMediaList,
+  type IndexerRelease,
 } from "@/lib/api/media";
+import { useTVSeasonDetails } from "@/lib/api/tmdb";
 import { MediaKindBadge } from "@/components/media/MediaKindBadge";
 import { MediaGrid } from "@/components/media/MediaGrid";
 import { MediaTable } from "@/components/media/MediaTable";
+import { InteractiveSearchDialog } from "@/components/media/InteractiveSearchDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -41,12 +44,24 @@ import {
   File,
   HardDrive,
   LayoutGrid,
-  Table,
+  Table as TableIcon,
   Star,
   Clock,
   Calendar,
   Plus,
+  CheckCircle,
+  XCircle,
+  Download,
+  Search,
 } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { formatDate } from "@/lib/utils";
 
 export function MediaDetailPage() {
@@ -57,6 +72,8 @@ export function MediaDetailPage() {
   const [deleteConfirmed, setDeleteConfirmed] = useState(false);
   const [isFileDeleteOpen, setIsFileDeleteOpen] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<number | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchEpisodeId, setSearchEpisodeId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [editData, setEditData] = useState({
     title: "",
@@ -78,6 +95,63 @@ export function MediaDetailPage() {
   const updateMedia = useUpdateMedia(id!);
   const deleteFile = useDeleteMediaFile();
   const deleteMediaItem = useDeleteMediaItem();
+
+  // For TV seasons, fetch TMDB episode data
+  const seasonMetadata =
+    media?.kind === "tv_season" && media.metadata
+      ? (media.metadata as Record<string, unknown>)
+      : null;
+  const seasonNumber = seasonMetadata?.season_number as number | null;
+  const parentTmdbId =
+    parentMedia?.metadata && typeof parentMedia.metadata === "object"
+      ? ((parentMedia.metadata as Record<string, unknown>).tmdb_id as
+          | string
+          | null)
+      : null;
+
+  const { data: tmdbSeasonData } = useTVSeasonDetails(
+    parentTmdbId ? parseInt(parentTmdbId) : null,
+    seasonNumber,
+  );
+
+  // Map TMDB episodes to their status
+  const episodesWithStatus = useMemo(() => {
+    if (!tmdbSeasonData?.episodes || media?.kind !== "tv_season") return [];
+
+    const existingEpisodes = new Map(
+      (children?.items || []).map((item) => {
+        const epNum =
+          item.metadata && typeof item.metadata === "object"
+            ? ((item.metadata as Record<string, unknown>).episode as number)
+            : null;
+        return [epNum, item];
+      }),
+    );
+
+    return (tmdbSeasonData.episodes as any[]).map((ep: any) => {
+      const existingEpisode = existingEpisodes.get(ep.episode_number);
+      const hasFiles =
+        existingEpisode && files
+          ? files.some((f) => f.media_id === existingEpisode.id)
+          : false;
+
+      return {
+        episode_number: ep.episode_number,
+        name: ep.name,
+        air_date: ep.air_date,
+        runtime: ep.runtime,
+        overview: ep.overview,
+        still_path: ep.still_path,
+        vote_average: ep.vote_average,
+        existingEpisode,
+        status: existingEpisode
+          ? hasFiles
+            ? "available"
+            : "missing"
+          : "not_added",
+      };
+    });
+  }, [tmdbSeasonData, children, media, files]);
 
   const handleEdit = () => {
     if (media) {
@@ -167,6 +241,12 @@ export function MediaDetailPage() {
       console.error("Failed to delete media item:", error);
       alert("Failed to delete media item");
     }
+  };
+
+  const handleSelectRelease = (release: IndexerRelease) => {
+    // TODO: Integrate with download handler (e.g., send to nzb-downloader plugin)
+    console.log("Selected release:", release);
+    alert(`Selected: ${release.title}\n\nDownload integration coming soon!`);
   };
 
   const formatFileSize = (bytes: number | null) => {
@@ -354,6 +434,13 @@ export function MediaDetailPage() {
                     Back
                   </Button>
                   <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsSearchOpen(true)}
+                    >
+                      <Search className="mr-2 h-4 w-4" />
+                      Search Releases
+                    </Button>
                     <Button variant="secondary" onClick={handleEdit}>
                       <Pencil className="mr-2 h-4 w-4" />
                       Edit
@@ -489,6 +576,10 @@ export function MediaDetailPage() {
               Back
             </Button>
             <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setIsSearchOpen(true)}>
+                <Search className="mr-2 h-4 w-4" />
+                Search Releases
+              </Button>
               <Button onClick={handleEdit}>
                 <Pencil className="mr-2 h-4 w-4" />
                 Edit
@@ -565,68 +656,192 @@ export function MediaDetailPage() {
         </>
       )}
 
-      {/* Children Section */}
-      {(childrenLoading ||
-        (children && children.items && children.items.length > 0)) && (
+      {/* Episodes Section for TV Seasons */}
+      {media.kind === "tv_season" && episodesWithStatus.length > 0 && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>
-                  {media.kind === "tv_series"
-                    ? "Seasons"
-                    : media.kind === "tv_season"
-                      ? "Episodes"
+            <CardTitle>Episodes</CardTitle>
+            <CardDescription>
+              {episodesWithStatus.length}{" "}
+              {episodesWithStatus.length === 1 ? "episode" : "episodes"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-16">#</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead className="w-32">Air Date</TableHead>
+                  <TableHead className="w-24">Runtime</TableHead>
+                  <TableHead className="w-24">Rating</TableHead>
+                  <TableHead className="w-32">Status</TableHead>
+                  <TableHead className="w-16">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {episodesWithStatus.map((episode) => (
+                  <TableRow
+                    key={episode.episode_number}
+                    className={episode.existingEpisode ? "cursor-pointer" : ""}
+                    onClick={() => {
+                      if (episode.existingEpisode) {
+                        navigate(`/media/${episode.existingEpisode.id}`);
+                      }
+                    }}
+                  >
+                    <TableCell className="font-medium">
+                      {episode.episode_number}
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{episode.name}</p>
+                        {episode.overview && (
+                          <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                            {episode.overview}
+                          </p>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {episode.air_date
+                        ? new Date(episode.air_date).toLocaleDateString()
+                        : "-"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {episode.runtime ? `${episode.runtime}m` : "-"}
+                    </TableCell>
+                    <TableCell>
+                      {episode.vote_average > 0 && (
+                        <div className="flex items-center gap-1">
+                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                          <span className="text-sm">
+                            {episode.vote_average.toFixed(1)}
+                          </span>
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {episode.status === "available" ? (
+                        <Badge variant="default" className="gap-1">
+                          <CheckCircle className="h-3 w-3" />
+                          Available
+                        </Badge>
+                      ) : episode.status === "missing" ? (
+                        <Badge variant="secondary" className="gap-1">
+                          <XCircle className="h-3 w-3" />
+                          Missing
+                        </Badge>
+                      ) : episode.status === "downloading" ? (
+                        <Badge variant="outline" className="gap-1">
+                          <Download className="h-3 w-3" />
+                          Downloading
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="gap-1">
+                          <XCircle className="h-3 w-3" />
+                          Not Added
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {episode.existingEpisode ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSearchEpisodeId(episode.existingEpisode!.id);
+                            setIsSearchOpen(true);
+                          }}
+                        >
+                          <Search className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          disabled
+                        >
+                          <Search className="h-4 w-4 opacity-30" />
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Children Section for non-season kinds */}
+      {media.kind !== "tv_season" &&
+        (childrenLoading ||
+          (children && children.items && children.items.length > 0)) && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>
+                    {media.kind === "tv_series"
+                      ? "Seasons"
                       : media.kind === "music_artist"
                         ? "Albums"
                         : media.kind === "music_album"
                           ? "Tracks"
                           : "Children"}
-                </CardTitle>
-                {children && (
-                  <CardDescription>
-                    {children.total} {children.total === 1 ? "item" : "items"}
-                  </CardDescription>
+                  </CardTitle>
+                  {children && (
+                    <CardDescription>
+                      {children.total} {children.total === 1 ? "item" : "items"}
+                    </CardDescription>
+                  )}
+                </div>
+                {children && children.items && children.items.length > 0 && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant={viewMode === "grid" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setViewMode("grid")}
+                    >
+                      <LayoutGrid className="h-4 w-4 mr-2" />
+                      Grid
+                    </Button>
+                    <Button
+                      variant={viewMode === "table" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setViewMode("table")}
+                    >
+                      <TableIcon className="h-4 w-4 mr-2" />
+                      Table
+                    </Button>
+                  </div>
                 )}
               </div>
-              {children && children.items && children.items.length > 0 && (
-                <div className="flex gap-2">
-                  <Button
-                    variant={viewMode === "grid" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setViewMode("grid")}
-                  >
-                    <LayoutGrid className="h-4 w-4 mr-2" />
-                    Grid
-                  </Button>
-                  <Button
-                    variant={viewMode === "table" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setViewMode("table")}
-                  >
-                    <Table className="h-4 w-4 mr-2" />
-                    Table
-                  </Button>
+            </CardHeader>
+            <CardContent>
+              {childrenLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
+              ) : children && children.items && children.items.length > 0 ? (
+                <>
+                  {viewMode === "grid" && <MediaGrid items={children.items} />}
+                  {viewMode === "table" && (
+                    <MediaTable items={children.items} />
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No children found
+                </p>
               )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {childrenLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : children && children.items && children.items.length > 0 ? (
-              <>
-                {viewMode === "grid" && <MediaGrid items={children.items} />}
-                {viewMode === "table" && <MediaTable items={children.items} />}
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">No children found</p>
-            )}
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
@@ -992,6 +1207,23 @@ export function MediaDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Interactive Search Dialog */}
+      {media && (
+        <InteractiveSearchDialog
+          mediaId={searchEpisodeId || id!}
+          mediaTitle={media.title}
+          mediaKind={media.kind}
+          open={isSearchOpen}
+          onOpenChange={(open) => {
+            setIsSearchOpen(open);
+            if (!open) {
+              setSearchEpisodeId(null);
+            }
+          }}
+          onSelectRelease={handleSelectRelease}
+        />
+      )}
     </div>
   );
 }

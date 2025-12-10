@@ -67,6 +67,12 @@ func (p *TMDBPlugin) APIRoutes(ctx context.Context) ([]plugins.RouteDescriptor, 
 		},
 		{
 			Method: "GET",
+			Path:   "/api/plugins/tmdb/tv/{id}/season/{season}",
+			Auth:   "session",
+			Tag:    "",
+		},
+		{
+			Method: "GET",
 			Path:   "/api/plugins/tmdb/tv/{id}/season/{season}/episode/{episode}",
 			Auth:   "session",
 			Tag:    "",
@@ -122,6 +128,8 @@ func (p *TMDBPlugin) HandleAPI(ctx context.Context, req *plugins.PluginHTTPReque
 		return p.handleSearchTV(ctx, req, apiKey)
 	case strings.Contains(req.Path, "/season/") && strings.Contains(req.Path, "/episode/"):
 		return p.handleGetEpisode(ctx, req, apiKey)
+	case strings.Contains(req.Path, "/season/") && !strings.Contains(req.Path, "/episode/"):
+		return p.handleGetSeason(ctx, req, apiKey)
 	case strings.HasPrefix(req.Path, "/api/plugins/tmdb/movie/"):
 		return p.handleGetMovie(ctx, req, apiKey)
 	case strings.HasPrefix(req.Path, "/api/plugins/tmdb/tv/"):
@@ -231,6 +239,32 @@ func (p *TMDBPlugin) handleGetTV(ctx context.Context, req *plugins.PluginHTTPReq
 	}, nil
 }
 
+// handleGetSeason gets detailed season information with episodes
+func (p *TMDBPlugin) handleGetSeason(ctx context.Context, req *plugins.PluginHTTPRequest, apiKey string) (*plugins.PluginHTTPResponse, error) {
+	// Parse path: /api/plugins/tmdb/tv/{id}/season/{season}
+	parts := strings.Split(req.Path, "/")
+	if len(parts) < 8 {
+		return p.errorResponse(http.StatusBadRequest, "Invalid season path")
+	}
+
+	tvID := parts[5]
+	season := parts[7]
+
+	apiURL := fmt.Sprintf("%s/tv/%s/season/%s?api_key=%s&append_to_response=images",
+		tmdbAPIBaseURL, tvID, season, apiKey)
+
+	data, err := p.makeRequest(ctx, apiURL)
+	if err != nil {
+		return p.errorResponse(http.StatusInternalServerError, fmt.Sprintf("Failed to get season: %v", err))
+	}
+
+	return &plugins.PluginHTTPResponse{
+		StatusCode: http.StatusOK,
+		Headers:    map[string][]string{"Content-Type": {"application/json"}},
+		Body:       data,
+	}, nil
+}
+
 // handleGetEpisode gets detailed episode information
 func (p *TMDBPlugin) handleGetEpisode(ctx context.Context, req *plugins.PluginHTTPRequest, apiKey string) (*plugins.PluginHTTPResponse, error) {
 	// Parse path: /api/plugins/tmdb/tv/{id}/season/{season}/episode/{episode}
@@ -280,12 +314,12 @@ func (p *TMDBPlugin) handleEnrichMedia(ctx context.Context, req *plugins.PluginH
 		return p.errorResponse(http.StatusBadRequest, "tmdb_id and type are required")
 	}
 
-	// Fetch metadata from TMDB
+	// Fetch metadata from TMDB including external IDs
 	var apiURL string
 	if reqBody.Type == "movie" {
-		apiURL = fmt.Sprintf("%s/movie/%s?api_key=%s&append_to_response=credits,images", tmdbAPIBaseURL, reqBody.TMDBID, apiKey)
+		apiURL = fmt.Sprintf("%s/movie/%s?api_key=%s&append_to_response=credits,images,external_ids", tmdbAPIBaseURL, reqBody.TMDBID, apiKey)
 	} else if reqBody.Type == "tv" {
-		apiURL = fmt.Sprintf("%s/tv/%s?api_key=%s&append_to_response=credits,images", tmdbAPIBaseURL, reqBody.TMDBID, apiKey)
+		apiURL = fmt.Sprintf("%s/tv/%s?api_key=%s&append_to_response=credits,images,external_ids", tmdbAPIBaseURL, reqBody.TMDBID, apiKey)
 	} else {
 		return p.errorResponse(http.StatusBadRequest, "type must be 'movie' or 'tv'")
 	}
@@ -343,14 +377,39 @@ func (p *TMDBPlugin) handleEnrichMedia(ctx context.Context, req *plugins.PluginH
 		metadata["runtime"] = int(runtime)
 	}
 
+	// Extract external IDs
+	externalIDs := make(map[string]interface{})
+	if extIDs, ok := tmdbData["external_ids"].(map[string]interface{}); ok {
+		if imdbID, ok := extIDs["imdb_id"].(string); ok && imdbID != "" {
+			externalIDs["imdb_id"] = imdbID
+		}
+		if tvdbID, ok := extIDs["tvdb_id"].(float64); ok && tvdbID > 0 {
+			externalIDs["tvdb_id"] = int(tvdbID)
+		}
+		if tvrageID, ok := extIDs["tvrage_id"].(float64); ok && tvrageID > 0 {
+			externalIDs["tvrage_id"] = int(tvrageID)
+		}
+		if facebookID, ok := extIDs["facebook_id"].(string); ok && facebookID != "" {
+			externalIDs["facebook_id"] = facebookID
+		}
+		if instagramID, ok := extIDs["instagram_id"].(string); ok && instagramID != "" {
+			externalIDs["instagram_id"] = instagramID
+		}
+		if twitterID, ok := extIDs["twitter_id"].(string); ok && twitterID != "" {
+			externalIDs["twitter_id"] = twitterID
+		}
+	}
+
 	// Build response with instructions for updating the media item
 	response := map[string]interface{}{
-		"media_id": mediaID,
-		"metadata": metadata,
-		"message":  "Metadata fetched successfully. Update the media item's metadata column with this data.",
+		"media_id":     mediaID,
+		"metadata":     metadata,
+		"external_ids": externalIDs,
+		"message":      "Metadata fetched successfully. Update the media item's metadata and external_ids columns with this data.",
 		"sql_example": fmt.Sprintf(
-			"UPDATE media_items SET metadata = metadata || '%s'::jsonb WHERE id = %s",
+			"UPDATE media_items SET metadata = metadata || '%s'::jsonb, external_ids = '%s'::jsonb WHERE id = %s",
 			mustMarshal(metadata),
+			mustMarshal(externalIDs),
 			mediaID,
 		),
 	}
@@ -384,6 +443,7 @@ func (p *TMDBPlugin) handleEnrichMediaBatch(ctx context.Context, req *plugins.Pl
 	}
 
 	metadata := make(map[string]interface{})
+	externalIDs := make(map[string]interface{})
 
 	// Handle movies
 	if reqBody.Kind == "movie" {
@@ -414,7 +474,7 @@ func (p *TMDBPlugin) handleEnrichMediaBatch(ctx context.Context, req *plugins.Pl
 		tmdbID := fmt.Sprintf("%.0f", firstResult["id"].(float64))
 
 		// Fetch full movie details
-		movieURL := fmt.Sprintf("%s/movie/%s?api_key=%s&append_to_response=credits,images",
+		movieURL := fmt.Sprintf("%s/movie/%s?api_key=%s&append_to_response=credits,images,external_ids",
 			tmdbAPIBaseURL, tmdbID, apiKey)
 		movieData, err := p.makeRequest(ctx, movieURL)
 		if err != nil {
@@ -455,7 +515,7 @@ func (p *TMDBPlugin) handleEnrichMediaBatch(ctx context.Context, req *plugins.Pl
 		tmdbID := fmt.Sprintf("%.0f", firstResult["id"].(float64))
 
 		// Fetch full TV series details
-		seriesURL := fmt.Sprintf("%s/tv/%s?api_key=%s&append_to_response=credits,images",
+		seriesURL := fmt.Sprintf("%s/tv/%s?api_key=%s&append_to_response=credits,images,external_ids",
 			tmdbAPIBaseURL, tmdbID, apiKey)
 		seriesData, err := p.makeRequest(ctx, seriesURL)
 		if err != nil {
@@ -509,6 +569,36 @@ func (p *TMDBPlugin) handleEnrichMediaBatch(ctx context.Context, req *plugins.Pl
 		}
 
 		metadata = extractMetadata(seasonDetails, "tv_season", tmdbID)
+
+		// Fetch series-level external IDs (seasons don't have their own external IDs)
+		seriesURL := fmt.Sprintf("%s/tv/%s?api_key=%s&append_to_response=external_ids",
+			tmdbAPIBaseURL, tmdbID, apiKey)
+		seriesData, err := p.makeRequest(ctx, seriesURL)
+		if err == nil {
+			var seriesDetails map[string]interface{}
+			if err := json.Unmarshal(seriesData, &seriesDetails); err == nil {
+				if extIDs, ok := seriesDetails["external_ids"].(map[string]interface{}); ok {
+					if imdbID, ok := extIDs["imdb_id"].(string); ok && imdbID != "" {
+						externalIDs["imdb_id"] = imdbID
+					}
+					if tvdbID, ok := extIDs["tvdb_id"].(float64); ok && tvdbID > 0 {
+						externalIDs["tvdb_id"] = int(tvdbID)
+					}
+					if tvrageID, ok := extIDs["tvrage_id"].(float64); ok && tvrageID > 0 {
+						externalIDs["tvrage_id"] = int(tvrageID)
+					}
+					if facebookID, ok := extIDs["facebook_id"].(string); ok && facebookID != "" {
+						externalIDs["facebook_id"] = facebookID
+					}
+					if instagramID, ok := extIDs["instagram_id"].(string); ok && instagramID != "" {
+						externalIDs["instagram_id"] = instagramID
+					}
+					if twitterID, ok := extIDs["twitter_id"].(string); ok && twitterID != "" {
+						externalIDs["twitter_id"] = twitterID
+					}
+				}
+			}
+		}
 	}
 
 	// Handle TV episodes
@@ -550,12 +640,49 @@ func (p *TMDBPlugin) handleEnrichMediaBatch(ctx context.Context, req *plugins.Pl
 		}
 
 		metadata = extractMetadata(episodeDetails, "tv_episode", tmdbID)
+
+		// Fetch series-level external IDs (episodes don't have their own external IDs)
+		seriesURL := fmt.Sprintf("%s/tv/%s?api_key=%s&append_to_response=external_ids",
+			tmdbAPIBaseURL, tmdbID, apiKey)
+		seriesData, err := p.makeRequest(ctx, seriesURL)
+		if err == nil {
+			var seriesDetails map[string]interface{}
+			if err := json.Unmarshal(seriesData, &seriesDetails); err == nil {
+				if extIDs, ok := seriesDetails["external_ids"].(map[string]interface{}); ok {
+					if imdbID, ok := extIDs["imdb_id"].(string); ok && imdbID != "" {
+						externalIDs["imdb_id"] = imdbID
+					}
+					if tvdbID, ok := extIDs["tvdb_id"].(float64); ok && tvdbID > 0 {
+						externalIDs["tvdb_id"] = int(tvdbID)
+					}
+					if tvrageID, ok := extIDs["tvrage_id"].(float64); ok && tvrageID > 0 {
+						externalIDs["tvrage_id"] = int(tvrageID)
+					}
+					if facebookID, ok := extIDs["facebook_id"].(string); ok && facebookID != "" {
+						externalIDs["facebook_id"] = facebookID
+					}
+					if instagramID, ok := extIDs["instagram_id"].(string); ok && instagramID != "" {
+						externalIDs["instagram_id"] = instagramID
+					}
+					if twitterID, ok := extIDs["twitter_id"].(string); ok && twitterID != "" {
+						externalIDs["twitter_id"] = twitterID
+					}
+				}
+			}
+		}
 	}
 
-	body, _ := json.Marshal(map[string]interface{}{
+	responseData := map[string]interface{}{
 		"metadata": metadata,
 		"success":  true,
-	})
+	}
+
+	// Add external_ids if we have any
+	if len(externalIDs) > 0 {
+		responseData["external_ids"] = externalIDs
+	}
+
+	body, _ := json.Marshal(responseData)
 
 	return &plugins.PluginHTTPResponse{
 		StatusCode: http.StatusOK,
@@ -619,6 +746,39 @@ func extractMetadata(tmdbData map[string]interface{}, mediaType string, tmdbID s
 		metadata["episode_name"] = name
 	}
 
+	// Extract season number (for tv_season media type)
+	if seasonNumber, ok := tmdbData["season_number"].(float64); ok {
+		metadata["season_number"] = int(seasonNumber)
+	}
+
+	// Extract episode number (for tv_episode media type)
+	if episodeNumber, ok := tmdbData["episode_number"].(float64); ok {
+		metadata["episode_number"] = int(episodeNumber)
+		metadata["episode"] = int(episodeNumber) // Also store as "episode" for compatibility
+	}
+
+	// Extract season number for episodes (episodes have both season_number and episode_number)
+	if mediaType == "tv_episode" {
+		if seasonNumber, ok := tmdbData["season_number"].(float64); ok {
+			metadata["season"] = int(seasonNumber)
+			metadata["season_number"] = int(seasonNumber)
+		}
+	}
+
+	// Extract external IDs into metadata (for backward compatibility)
+	// These will also be saved to the external_ids column separately
+	if extIDs, ok := tmdbData["external_ids"].(map[string]interface{}); ok {
+		if imdbID, ok := extIDs["imdb_id"].(string); ok && imdbID != "" {
+			metadata["imdb_id"] = imdbID
+		}
+		if tvdbID, ok := extIDs["tvdb_id"].(float64); ok && tvdbID > 0 {
+			metadata["tvdb_id"] = fmt.Sprintf("%.0f", tvdbID)
+		}
+		if tvrageID, ok := extIDs["tvrage_id"].(float64); ok && tvrageID > 0 {
+			metadata["tvrage_id"] = fmt.Sprintf("%.0f", tvrageID)
+		}
+	}
+
 	return metadata
 }
 
@@ -633,6 +793,16 @@ func (p *TMDBPlugin) UIManifest(ctx context.Context) (*plugins.UIManifest, error
 // HandleEvent handles system events
 func (p *TMDBPlugin) HandleEvent(ctx context.Context, evt plugins.Event) error {
 	return nil
+}
+
+// IsIndexer returns false as TMDB is not an indexer plugin
+func (p *TMDBPlugin) IsIndexer(ctx context.Context) (bool, error) {
+	return false, nil
+}
+
+// Search is not implemented for TMDB plugin
+func (p *TMDBPlugin) Search(ctx context.Context, req *plugins.IndexerSearchRequest) (*plugins.IndexerSearchResponse, error) {
+	return nil, fmt.Errorf("TMDB plugin does not support search")
 }
 
 // Helper functions

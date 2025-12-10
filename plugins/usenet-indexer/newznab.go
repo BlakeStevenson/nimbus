@@ -77,12 +77,14 @@ type Release struct {
 	GUID        string            `json:"guid"`
 	Link        string            `json:"link"`
 	Comments    string            `json:"comments"`
-	PublishDate time.Time         `json:"publishDate"`
+	PublishDate time.Time         `json:"publish_date"` // Changed to match IndexerRelease
 	Category    string            `json:"category"`
 	Size        int64             `json:"size"`
 	Description string            `json:"description"`
-	DownloadURL string            `json:"downloadUrl"`
+	DownloadURL string            `json:"download_url"` // Changed to match IndexerRelease
 	Attributes  map[string]string `json:"attributes"`
+	IndexerID   string            `json:"indexer_id,omitempty"`   // Added for IndexerRelease compatibility
+	IndexerName string            `json:"indexer_name,omitempty"` // Added for IndexerRelease compatibility
 }
 
 // NewNewznabClient creates a new Newznab client
@@ -149,16 +151,21 @@ func (c *NewznabClient) SearchTV(params SearchParams) ([]Release, error) {
 	queryParams.Set("limit", strconv.Itoa(params.Limit))
 	queryParams.Set("offset", strconv.Itoa(params.Offset))
 
-	if params.Query != "" {
+	// Set tvdbid if available
+	if params.TVDBID != "" {
+		queryParams.Set("tvdbid", params.TVDBID)
+		// For season searches, also include query (e.g., "S01") to help prioritize season packs
+		// This is safe because the query is just a season identifier, not a title search
+		if params.Query != "" && params.Season > 0 && params.Episode == 0 {
+			queryParams.Set("q", params.Query)
+		}
+	} else if params.Query != "" {
+		// Only use query if we don't have a tvdbid
 		queryParams.Set("q", params.Query)
 	}
 
 	if len(params.Categories) > 0 {
 		queryParams.Set("cat", strings.Join(params.Categories, ","))
-	}
-
-	if params.TVDBID != "" {
-		queryParams.Set("tvdbid", params.TVDBID)
 	}
 
 	if params.TVRageID != "" {
@@ -203,16 +210,17 @@ func (c *NewznabClient) SearchMovie(params SearchParams) ([]Release, error) {
 	queryParams.Set("limit", strconv.Itoa(params.Limit))
 	queryParams.Set("offset", strconv.Itoa(params.Offset))
 
-	if params.Query != "" {
+	// When using imdbid, do NOT send the query parameter as it may cause incorrect results
+	// The imdbid is the authoritative identifier
+	if params.IMDBID != "" {
+		queryParams.Set("imdbid", params.IMDBID)
+	} else if params.Query != "" {
+		// Only use query if we don't have an imdbid
 		queryParams.Set("q", params.Query)
 	}
 
 	if len(params.Categories) > 0 {
 		queryParams.Set("cat", strings.Join(params.Categories, ","))
-	}
-
-	if params.IMDBID != "" {
-		queryParams.Set("imdbid", params.IMDBID)
 	}
 
 	// Make the request

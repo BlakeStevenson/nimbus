@@ -22,6 +22,7 @@ type LoadedPlugin struct {
 	Client    MediaSuitePlugin // RPC client
 	Routes    []RouteDescriptor
 	UI        *UIManifest
+	IsIndexer bool           // Whether this plugin provides indexer functionality
 	RawClient *plugin.Client // The underlying go-plugin client
 }
 
@@ -147,6 +148,21 @@ func (pm *PluginManager) GetPlugin(id string) (*LoadedPlugin, bool) {
 
 	lp, ok := pm.plugins[id]
 	return lp, ok
+}
+
+// ListIndexerPlugins returns all loaded plugins that provide indexer functionality
+func (pm *PluginManager) ListIndexerPlugins() []*LoadedPlugin {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	indexers := make([]*LoadedPlugin, 0)
+	for _, lp := range pm.plugins {
+		if lp.IsIndexer {
+			indexers = append(indexers, lp)
+		}
+	}
+
+	return indexers
 }
 
 // EnablePlugin enables a plugin and loads it
@@ -335,12 +351,22 @@ func (pm *PluginManager) loadPlugin(ctx context.Context, id string) error {
 		}
 	}
 
+	// Check if plugin is an indexer
+	isIndexer := false
+	indexerCheck, err := pluginClient.IsIndexer(ctx)
+	if err != nil {
+		pm.logger.Debug("Plugin does not implement indexer interface", zap.String("plugin_id", id))
+	} else {
+		isIndexer = indexerCheck
+	}
+
 	// Store loaded plugin
 	pm.plugins[id] = &LoadedPlugin{
 		Meta:      meta,
 		Client:    pluginClient,
 		Routes:    routes,
 		UI:        uiManifest,
+		IsIndexer: isIndexer,
 		RawClient: client,
 	}
 
@@ -348,7 +374,8 @@ func (pm *PluginManager) loadPlugin(ctx context.Context, id string) error {
 		zap.String("plugin_id", id),
 		zap.String("plugin_name", meta.Name),
 		zap.String("version", meta.Version),
-		zap.Int("routes", len(routes)))
+		zap.Int("routes", len(routes)),
+		zap.Bool("is_indexer", isIndexer))
 
 	return nil
 }

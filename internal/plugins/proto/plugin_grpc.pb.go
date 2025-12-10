@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.0
 // - protoc             v6.33.1
-// source: plugin.proto
+// source: internal/plugins/proto/plugin.proto
 
 package proto
 
@@ -24,6 +24,8 @@ const (
 	PluginService_HandleAPI_FullMethodName   = "/proto.PluginService/HandleAPI"
 	PluginService_UIManifest_FullMethodName  = "/proto.PluginService/UIManifest"
 	PluginService_HandleEvent_FullMethodName = "/proto.PluginService/HandleEvent"
+	PluginService_IsIndexer_FullMethodName   = "/proto.PluginService/IsIndexer"
+	PluginService_Search_FullMethodName      = "/proto.PluginService/Search"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -37,6 +39,8 @@ type PluginServiceClient interface {
 	HandleAPI(ctx context.Context, in *HandleAPIRequest, opts ...grpc.CallOption) (*HandleAPIResponse, error)
 	UIManifest(ctx context.Context, in *UIManifestRequest, opts ...grpc.CallOption) (*UIManifestResponse, error)
 	HandleEvent(ctx context.Context, in *HandleEventRequest, opts ...grpc.CallOption) (*HandleEventResponse, error)
+	IsIndexer(ctx context.Context, in *IsIndexerRequest, opts ...grpc.CallOption) (*IsIndexerResponse, error)
+	Search(ctx context.Context, in *IndexerSearchRequest, opts ...grpc.CallOption) (*IndexerSearchResponse, error)
 }
 
 type pluginServiceClient struct {
@@ -97,6 +101,26 @@ func (c *pluginServiceClient) HandleEvent(ctx context.Context, in *HandleEventRe
 	return out, nil
 }
 
+func (c *pluginServiceClient) IsIndexer(ctx context.Context, in *IsIndexerRequest, opts ...grpc.CallOption) (*IsIndexerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IsIndexerResponse)
+	err := c.cc.Invoke(ctx, PluginService_IsIndexer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) Search(ctx context.Context, in *IndexerSearchRequest, opts ...grpc.CallOption) (*IndexerSearchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IndexerSearchResponse)
+	err := c.cc.Invoke(ctx, PluginService_Search_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
@@ -108,6 +132,8 @@ type PluginServiceServer interface {
 	HandleAPI(context.Context, *HandleAPIRequest) (*HandleAPIResponse, error)
 	UIManifest(context.Context, *UIManifestRequest) (*UIManifestResponse, error)
 	HandleEvent(context.Context, *HandleEventRequest) (*HandleEventResponse, error)
+	IsIndexer(context.Context, *IsIndexerRequest) (*IsIndexerResponse, error)
+	Search(context.Context, *IndexerSearchRequest) (*IndexerSearchResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -132,6 +158,12 @@ func (UnimplementedPluginServiceServer) UIManifest(context.Context, *UIManifestR
 }
 func (UnimplementedPluginServiceServer) HandleEvent(context.Context, *HandleEventRequest) (*HandleEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method HandleEvent not implemented")
+}
+func (UnimplementedPluginServiceServer) IsIndexer(context.Context, *IsIndexerRequest) (*IsIndexerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method IsIndexer not implemented")
+}
+func (UnimplementedPluginServiceServer) Search(context.Context, *IndexerSearchRequest) (*IndexerSearchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Search not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 func (UnimplementedPluginServiceServer) testEmbeddedByValue()                       {}
@@ -244,6 +276,42 @@ func _PluginService_HandleEvent_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_IsIndexer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IsIndexerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).IsIndexer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_IsIndexer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).IsIndexer(ctx, req.(*IsIndexerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_Search_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IndexerSearchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).Search(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_Search_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).Search(ctx, req.(*IndexerSearchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -271,9 +339,17 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "HandleEvent",
 			Handler:    _PluginService_HandleEvent_Handler,
 		},
+		{
+			MethodName: "IsIndexer",
+			Handler:    _PluginService_IsIndexer_Handler,
+		},
+		{
+			MethodName: "Search",
+			Handler:    _PluginService_Search_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "plugin.proto",
+	Metadata: "internal/plugins/proto/plugin.proto",
 }
 
 const (
@@ -493,5 +569,5 @@ var SDKService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "plugin.proto",
+	Metadata: "internal/plugins/proto/plugin.proto",
 }

@@ -8,8 +8,10 @@ import (
 	"github.com/blakestevenson/nimbus/internal/db/generated"
 	"github.com/blakestevenson/nimbus/internal/http/handlers"
 	"github.com/blakestevenson/nimbus/internal/httputil"
+	"github.com/blakestevenson/nimbus/internal/indexer"
 	"github.com/blakestevenson/nimbus/internal/library"
 	"github.com/blakestevenson/nimbus/internal/media"
+	"github.com/blakestevenson/nimbus/internal/plugins"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
@@ -42,9 +44,14 @@ func NewRouter(
 	libraryHandler := library.NewHandler(queries, logger, libraryRootPath)
 	fileHandler := library.NewFileHandler(queries, logger)
 
-	// Log if plugin manager is provided
+	// Initialize indexer service if plugin manager is available
+	var indexerService *indexer.Service
 	if pluginManager != nil {
 		logger.Debug("Plugin manager provided to router")
+		if pm, ok := pluginManager.(*plugins.PluginManager); ok {
+			indexerService = indexer.NewService(pm, logger)
+			logger.Info("Indexer service initialized")
+		}
 	}
 
 	// Health check
@@ -90,6 +97,11 @@ func NewRouter(
 
 				// Individual file deletion
 				r.Delete("/files/{fileId}", fileHandler.DeleteMediaFile)
+
+				// Interactive search route (if indexer service is available)
+				if indexerService != nil {
+					setupSearchRoutes(r, indexerService, queries, logger)
+				}
 			})
 
 			// Type-specific convenience routes
@@ -132,6 +144,15 @@ func NewRouter(
 				})
 			})
 		})
+
+		// Unified indexer routes (require authentication)
+		if indexerService != nil {
+			r.Group(func(r chi.Router) {
+				r.Use(AuthMiddleware(authService, logger))
+
+				setupIndexerRoutes(r, indexerService, logger)
+			})
+		}
 
 		// Plugin management routes (require authentication and admin)
 		if pluginManager != nil {

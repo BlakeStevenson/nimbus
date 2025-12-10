@@ -10,6 +10,7 @@ import {
   Library,
   Users,
   Scan,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -26,6 +27,7 @@ interface NavItem {
 
 const coreNavItems: NavItem[] = [
   { label: "Dashboard", path: "/", icon: Home },
+  { label: "Browse", path: "/browse", icon: Search },
   { label: "All", path: "/media", icon: Library, group: "Library" },
   { label: "Movies", path: "/media/movies", icon: Film, group: "Library" },
   { label: "TV Shows", path: "/media/tv", icon: Tv, group: "Library" },
